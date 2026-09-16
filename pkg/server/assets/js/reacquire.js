@@ -22,7 +22,7 @@ class ReacquireManager {
     };
 
     constructor() {
-        this.api = (window.API || '/api').replace(/\/$/, '');
+        this.api = `${window.urlBase}api`;
         this.jobs = [];
         this.jobsPage = 1;
         this.jobsPageSize = 10;
