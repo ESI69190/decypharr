@@ -23,7 +23,6 @@ class RepairManager {
         $('clearStateBtn')?.addEventListener('click', () => this.openClearStateModal());
         $('viewBrokenBtn')?.addEventListener('click', () => this.openBrokenModal());
         $('refreshHistoryBtn')?.addEventListener('click', () => this.loadHistory());
-        $('refreshBrokenBtn')?.addEventListener('click', () => this.loadBroken());
         $('clearHistoryBtn')?.addEventListener('click', () => this.clearHistory());
         $('runRepairForm')?.addEventListener('submit', (e) => {
             e.preventDefault();
