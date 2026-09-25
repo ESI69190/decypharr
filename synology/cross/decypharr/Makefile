@@ -11,6 +11,11 @@ PKG_DIR = $(PKG_NAME)-$(PKG_VERS)
 BUILD_DEPENDS = native/go
 DEPENDS = cross/fuse
 
+ARM32_SYNO_ARCHS = alpine alpine4k armada38x monaco dakota ipq806x
+ifneq ($(filter $(ARCH),$(ARM32_SYNO_ARCHS)),)
+DEPENDS += cross/rapidyenc
+endif
+
 CGO_ENABLED = 1
 
 # cgofuse uses FUSE 2 headers on Linux by default. cross/fuse stages them under
@@ -44,5 +49,13 @@ decypharr_pre_compile:
 	@cp $(CURDIR)/src/jsonx_64.go $(GO_SRC_DIR)/internal/jsonx/jsonx_64.go
 	@cp $(CURDIR)/src/jsonx_32.go $(GO_SRC_DIR)/internal/jsonx/jsonx_32.go
 	@find $(GO_SRC_DIR) -type f -name '*.go' -exec sed -i 's|json "github.com/bytedance/sonic"|json "github.com/sirrobot01/decypharr/internal/jsonx"|g' {} +
+ifneq ($(filter $(ARCH),$(ARM32_SYNO_ARCHS)),)
+	@$(MSG) Patch github.com/Tensai75/rapidyenc to link the Synology ARMv7 build
+	@cd $(GO_SRC_DIR) && env $(ENV) go mod download github.com/Tensai75/rapidyenc@v0.0.1
+	@MOD_DIR="$(cd $(GO_SRC_DIR) && env $(ENV) go list -m -f '{{.Dir}}' github.com/Tensai75/rapidyenc)"; \
+		chmod u+w "${MOD_DIR}/cgo.go"; \
+		grep -q '#cgo linux,arm LDFLAGS:' "${MOD_DIR}/cgo.go" || \
+			sed -i '/#cgo linux,arm64 LDFLAGS:/a #cgo linux,arm LDFLAGS: -lrapidyenc -lstdc++' "${MOD_DIR}/cgo.go"
+endif
 
 include ../../mk/spksrc.cross-go.mk
