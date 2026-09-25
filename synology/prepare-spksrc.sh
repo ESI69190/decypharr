@@ -15,7 +15,19 @@ fi
 git -C "${SPKSRC_DIR}" fetch --depth=1 origin "${SPKSRC_REF}"
 git -C "${SPKSRC_DIR}" checkout --detach FETCH_HEAD
 
-git -C "${SPKSRC_DIR}" apply --whitespace=nowarn "${ROOT_DIR}/synology/patches/spksrc-fuse3-no-udev.patch"
+for fuse3_makefile in \
+    "${SPKSRC_DIR}/cross/fuse3-latest/Makefile" \
+    "${SPKSRC_DIR}/cross/fuse3.16/Makefile"
+do
+    sed -i '/^OPTIONAL_DEPENDS.*libudev/d' "${fuse3_makefile}"
+
+    perl -0pi -e 's/\nifeq \(\$\(call version_ge, \$\{TCVERSION\}, 7\.0\),1\)\nDEPENDS = cross\/libudev_219\nelse\nDEPENDS = cross\/libudev_204\nendif\n/\n/g' "${fuse3_makefile}"
+
+    if ! grep -q -- '-Dudevrulesdir=/usr/lib/udev/rules.d' "${fuse3_makefile}"; then
+        sed -i '/CONFIGURE_ARGS += -Duseroot=false/a CONFIGURE_ARGS += -Dudevrulesdir=/usr/lib/udev/rules.d' "${fuse3_makefile}"
+    fi
+done
+
 
 rm -rf "${SPKSRC_DIR}/cross/decypharr" "${SPKSRC_DIR}/cross/rapidyenc" "${SPKSRC_DIR}/spk/decypharr"
 mkdir -p "${SPKSRC_DIR}/cross/decypharr" "${SPKSRC_DIR}/cross/rapidyenc" "${SPKSRC_DIR}/spk/decypharr/src"
