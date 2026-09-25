@@ -19,7 +19,7 @@ CONFIGURE_ARGS += -DBUILD_NATIVE=OFF
 CONFIGURE_ARGS += -DTARGET_ARCH=arm
 
 # Only the static library is required by the Go/cgo wrapper.
-COMPILE_ARGS = --target rapidyenc_static
+COMPILE_ARGS = rapidyenc_static
 INSTALL_TARGET = rapidyenc_install
 
 include ../../mk/spksrc.cross-cmake.mk
