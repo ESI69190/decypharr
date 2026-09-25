@@ -9,7 +9,7 @@ The package layout follows the same model as the SynoCommunity packages for Baza
 - Persistent configuration, cache and logs live below `SYNOPKG_PKGVAR`.
 - DSM/SRM controls the process through `service-setup.sh`.
 - Port 8282 is exposed as the administration link.
-- rclone and libfuse are packaged through existing spksrc cross packages.
+- rclone, FUSE 2 and FUSE 3 are packaged through spksrc. FUSE 2 is used by Decypharr/cgofuse and FUSE 3 provides the `fusermount3` helper required by rclone.
 
 ## Runtime layout
 
@@ -20,6 +20,10 @@ Typical DSM 7 installation:
 ├── target/
 │   ├── bin/decypharr
 │   ├── bin/rclone
+│   ├── bin/fusermount
+│   ├── bin/fusermount3
+│   ├── bin/decypharr-fuse-fix
+│   ├── etc/fuse.conf
 │   └── lib/...
 └── var/
     ├── data/
@@ -35,13 +39,37 @@ decypharr --config /var/packages/decypharr/var/data
 
 The package account is managed by Synology, normally as `sc-decypharr`. Give that account access to the shared folders Decypharr, Sonarr or Radarr must read.
 
+## DSM 7 FUSE post-install
+
+DSM 7 rejects third-party SPKs that declare root execution privileges and strips or blocks setuid-root helpers from unsigned packages. Decypharr therefore installs and runs entirely as the unprivileged `sc-decypharr` package account.
+
+After each install or upgrade, an administrator must explicitly enable the two FUSE mount helpers:
+
+```bash
+/var/packages/decypharr/target/bin/decypharr-fuse-fix
+```
+
+The helper requests `sudo` when required, changes only `fusermount` and `fusermount3` to `root:root 4755`, verifies the package-local `etc/fuse.conf`, and restarts Decypharr. The main Decypharr process remains unprivileged.
+
+Verify with:
+
+```bash
+stat -c '%A %a %U:%G %n' \
+  /var/packages/decypharr/target/bin/fusermount \
+  /var/packages/decypharr/target/bin/fusermount3
+
+sudo -u sc-decypharr \
+  cat /var/packages/decypharr/target/etc/fuse.conf
+```
+
+
 ## Supported package architectures
 
 The CI intentionally targets the Synology package architectures requested for DSM 7.x and SRM 1.x.
 
 ### DSM 7.x
 
-All DSM packages are built against DSM 7.1-compatible spksrc toolchains:
+All DSM packages are built against DSM 7.3-compatible spksrc toolchains:
 
 ```text
 apollolake
@@ -78,7 +106,7 @@ rtd1619b
 evansport
 ```
 
-For `geminilakenk`, `icelaked`, `r1000nk` and `v1000nk`, spksrc does not provide a dedicated DSM 7.1 toolchain directory. Those packages therefore compile with the DSM 7.1 generic `x64` toolchain, whose architecture list explicitly includes those platforms, while `SPK_PACKAGE_ARCHS` restricts the generated package metadata to the requested platform.
+For `geminilakenk`, `icelaked`, `r1000nk` and `v1000nk`, spksrc does not provide a dedicated DSM 7.3 toolchain directory. Those packages therefore compile with the DSM 7.3 generic `x64` toolchain, whose architecture list explicitly includes those platforms, while `SPK_PACKAGE_ARCHS` restricts the generated package metadata to the requested platform.
 
 ### SRM 1.x
 
@@ -92,7 +120,7 @@ cypress
 
 ## CI behavior
 
-The workflow first performs a complete DSM 7.1 `apollolake` smoke build. The remaining architecture matrix starts only after that package succeeds. This prevents a common packaging error from wasting the entire matrix.
+The workflow first performs a complete DSM 7.3 `apollolake` smoke build. The remaining architecture matrix starts only after that package succeeds. This prevents a common packaging error from wasting the entire matrix.
 
 Each generated SPK is architecture-specific through `SPK_PACKAGE_ARCHS`, even when a generic family toolchain is used for compilation.
 
@@ -112,7 +140,7 @@ SHA="$(git rev-parse HEAD)"
 DECYPHARR_GIT_HASH="$SHA" \
 DECYPHARR_VERSION="0.0.0-dev" \
 make -C .synology-build/spksrc/spk/decypharr \
-  arch-apollolake-7.1 \
+  arch-apollolake-7.3 \
   SPK_PACKAGE_ARCHS=apollolake
 ```
 
