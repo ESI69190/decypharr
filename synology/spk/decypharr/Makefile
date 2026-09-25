@@ -19,6 +19,7 @@ LICENSE = MIT
 STARTABLE = yes
 SERVICE_USER = auto
 SERVICE_SETUP = src/service-setup.sh
+SPK_COMMANDS = bin/decypharr-fuse-fix
 CONF_DIR = src/conf
 
 SERVICE_PORT = 8282
@@ -47,4 +48,4 @@ include ../../mk/spksrc.spk.mk
 decypharr_extra_install:
 	@install -d -m 755 $(STAGING_DIR)/etc
 	@install -m 644 $(CURDIR)/src/fuse.conf $(STAGING_DIR)/etc/fuse.conf
-	@chmod 4755 $(STAGING_DIR)/bin/fusermount $(STAGING_DIR)/bin/fusermount3
+	@install -m 755 $(CURDIR)/src/decypharr-fuse-fix $(STAGING_DIR)/bin/decypharr-fuse-fix
