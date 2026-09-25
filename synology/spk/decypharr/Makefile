@@ -25,6 +25,13 @@ ADMIN_PORT = $(SERVICE_PORT)
 
 REQUIRED_MIN_DSM = 7.3
 REQUIRED_MIN_SRM = 1.3
+
+# DSM 7.3.1 build 86003 is a supported runtime target. The 7.3 toolchain
+# currently advertises 7.3-86009, which makes DSM reject the SPK before
+# installation even though we intentionally support the earlier 7.3.1 build.
+ifeq ($(TCVERSION),7.3)
+OS_MIN_VER = 7.3-86003
+endif
 UNSUPPORTED_ARCHS = $(PPC_ARCHS) $(ARMv5_ARCHS)
 
 USE_ALTERNATE_TMPDIR = 1
