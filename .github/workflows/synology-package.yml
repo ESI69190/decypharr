@@ -31,6 +31,7 @@ concurrency:
 
 env:
   SPKSRC_REF: e353e52f6117f59326550ece07ca0c68903a57fc
+  DECYPHARR_BASE_VERSION: "2.5"
 
 jobs:
   smoke:
@@ -49,9 +50,7 @@ jobs:
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
-            # Synology INFO versions may only contain numeric components
-            # separated by '.', '-' or '_'. Keep CI builds DSM-valid.
-            VERSION="0.0.${GITHUB_RUN_NUMBER}"
+            VERSION="${DECYPHARR_BASE_VERSION}"
           fi
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
           echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
@@ -267,9 +266,7 @@ jobs:
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
-            # Synology INFO versions may only contain numeric components
-            # separated by '.', '-' or '_'. Keep CI builds DSM-valid.
-            VERSION="0.0.${GITHUB_RUN_NUMBER}"
+            VERSION="${DECYPHARR_BASE_VERSION}"
           fi
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
           echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
