@@ -4,13 +4,13 @@
   },
   "username": "sc-decypharr",
   "groupname": "synocommunity",
-  "ctrl-script": [
+  "executable": [
     {
-      "action": "postinst",
+      "relpath": "bin/fusermount",
       "run-as": "root"
     },
     {
-      "action": "postupgrade",
+      "relpath": "bin/fusermount3",
       "run-as": "root"
     }
   ]
