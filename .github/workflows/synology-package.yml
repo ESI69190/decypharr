@@ -128,7 +128,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 20
       matrix:
         include:
           # DSM 7.x packages are built against the DSM 7.1 toolchains requested
