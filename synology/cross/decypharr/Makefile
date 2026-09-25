@@ -21,7 +21,7 @@ CGO_LDFLAGS = -L$(STAGING_INSTALL_PREFIX)/lib
 ENV += CGO_CFLAGS="$(CGO_CFLAGS)"
 ENV += CGO_LDFLAGS="$(CGO_LDFLAGS)"
 
-REQUIRED_MIN_DSM = 7.1
+REQUIRED_MIN_DSM = 7.3
 REQUIRED_MIN_SRM = 1.3
 UNSUPPORTED_ARCHS = $(PPC_ARCHS) $(ARMv5_ARCHS)
 
@@ -35,5 +35,14 @@ GO_BIN_DIR = $(GO_SRC_DIR)/decypharr
 DECYPHARR_BUILD_VERSION ?= $(if $(DECYPHARR_VERSION),$(DECYPHARR_VERSION),0.0.0)
 GO_BUILD_ARGS += -trimpath
 GO_LDFLAGS = -s -w -X github.com/sirrobot01/decypharr/pkg/version.Version=$(DECYPHARR_BUILD_VERSION) -X github.com/sirrobot01/decypharr/pkg/version.Channel=synology
+
+PRE_COMPILE_TARGET = decypharr_pre_compile
+
+.PHONY: decypharr_pre_compile
+decypharr_pre_compile:
+	@mkdir -p $(GO_SRC_DIR)/internal/jsonx
+	@cp $(CURDIR)/src/jsonx_64.go $(GO_SRC_DIR)/internal/jsonx/jsonx_64.go
+	@cp $(CURDIR)/src/jsonx_32.go $(GO_SRC_DIR)/internal/jsonx/jsonx_32.go
+	@find $(GO_SRC_DIR) -type f -name '*.go' -exec sed -i 's|json "github.com/bytedance/sonic"|json "github.com/sirrobot01/decypharr/internal/jsonx"|g' {} +
 
 include ../../mk/spksrc.cross-go.mk
