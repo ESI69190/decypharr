@@ -3,15 +3,5 @@
     "run-as": "package"
   },
   "username": "sc-decypharr",
-  "groupname": "synocommunity",
-  "executable": [
-    {
-      "relpath": "bin/fusermount",
-      "run-as": "root"
-    },
-    {
-      "relpath": "bin/fusermount3",
-      "run-as": "root"
-    }
-  ]
+  "groupname": "synocommunity"
 }
