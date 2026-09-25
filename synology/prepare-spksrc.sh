@@ -15,14 +15,30 @@ fi
 git -C "${SPKSRC_DIR}" fetch --depth=1 origin "${SPKSRC_REF}"
 git -C "${SPKSRC_DIR}" checkout --detach FETCH_HEAD
 
-rm -rf "${SPKSRC_DIR}/cross/decypharr" "${SPKSRC_DIR}/spk/decypharr"
-mkdir -p "${SPKSRC_DIR}/cross/decypharr" "${SPKSRC_DIR}/spk/decypharr/src"
+rm -rf "${SPKSRC_DIR}/cross/decypharr" "${SPKSRC_DIR}/cross/rapidyenc" "${SPKSRC_DIR}/spk/decypharr"
+mkdir -p "${SPKSRC_DIR}/cross/decypharr" "${SPKSRC_DIR}/cross/rapidyenc" "${SPKSRC_DIR}/spk/decypharr/src"
 
 cp -a "${ROOT_DIR}/synology/cross/decypharr/." "${SPKSRC_DIR}/cross/decypharr/"
+cp -a "${ROOT_DIR}/synology/cross/rapidyenc/." "${SPKSRC_DIR}/cross/rapidyenc/"
 cp -a "${ROOT_DIR}/synology/spk/decypharr/." "${SPKSRC_DIR}/spk/decypharr/"
 cp "${ROOT_DIR}/docs/src/assets/logo.png" "${SPKSRC_DIR}/spk/decypharr/src/decypharr.png"
 
 mkdir -p "${SPKSRC_DIR}/distrib"
+
+RAPIDYENC_SHA="47f67f5ae31455a4e7bb2566fb2b6c3c1b0105e9"
+RAPIDYENC_ARCHIVE="rapidyenc-${RAPIDYENC_SHA}.tar.gz"
+RAPIDYENC_PATH="${SPKSRC_DIR}/distrib/${RAPIDYENC_ARCHIVE}"
+
+if [ ! -f "${RAPIDYENC_PATH}" ]; then
+    curl --fail --location --retry 3         "https://github.com/animetosho/rapidyenc/archive/${RAPIDYENC_SHA}.tar.gz"         --output "${RAPIDYENC_PATH}"
+fi
+
+{
+    printf '%s SHA1 %s\n' "${RAPIDYENC_ARCHIVE}" "$(sha1sum "${RAPIDYENC_PATH}" | awk '{print $1}')"
+    printf '%s SHA256 %s\n' "${RAPIDYENC_ARCHIVE}" "$(sha256sum "${RAPIDYENC_PATH}" | awk '{print $1}')"
+    printf '%s MD5 %s\n' "${RAPIDYENC_ARCHIVE}" "$(md5sum "${RAPIDYENC_PATH}" | awk '{print $1}')"
+} > "${SPKSRC_DIR}/cross/rapidyenc/digests"
+
 ARCHIVE_NAME="decypharr-${SOURCE_SHA}.tar.gz"
 ARCHIVE_PATH="${SPKSRC_DIR}/distrib/${ARCHIVE_NAME}"
 
