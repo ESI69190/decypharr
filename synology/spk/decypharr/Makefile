@@ -19,6 +19,7 @@ LICENSE = MIT
 STARTABLE = yes
 SERVICE_USER = auto
 SERVICE_SETUP = src/service-setup.sh
+CONF_DIR = src/conf
 
 SERVICE_PORT = 8282
 SERVICE_PORT_TITLE = Decypharr Web UI
@@ -37,5 +38,12 @@ UNSUPPORTED_ARCHS = $(PPC_ARCHS) $(ARMv5_ARCHS)
 
 USE_ALTERNATE_TMPDIR = 1
 
+POST_STRIP_TARGET = decypharr_extra_install
+
 include ../../mk/spksrc.common.mk
 include ../../mk/spksrc.spk.mk
+
+.PHONY: decypharr_extra_install
+decypharr_extra_install:
+	@install -d -m 755 $(STAGING_DIR)/etc
+	@install -m 644 $(CURDIR)/src/fuse.conf $(STAGING_DIR)/etc/fuse.conf
