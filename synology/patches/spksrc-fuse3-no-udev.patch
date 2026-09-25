@@ -1,0 +1,66 @@
+diff --git a/cross/fuse3-latest/Makefile b/cross/fuse3-latest/Makefile
+index 0000000..0000000 100644
+--- a/cross/fuse3-latest/Makefile
++++ b/cross/fuse3-latest/Makefile
+@@ -7,9 +7,6 @@ PKG_DIST_SITE = https://github.com/libfuse/libfuse/archive/
+ PKG_DIR = libfuse-$(PKG_REAL_NAME)-$(PKG_VERS)
+ 
+-OPTIONAL_DEPENDS = cross/libudev_204 cross/libudev_219
+-
+ # libudev:
+ UNSUPPORTED_ARCHS = $(OLD_PPC_ARCHS)
+ # lacking stdatomics:
+@@ -17,12 +14,6 @@ UNSUPPORTED_ARCHS += $(ARMv5_ARCHS) $(ARMv7L_ARCHS)
+ 
+ include ../../mk/spksrc.common.mk
+ 
+-ifeq ($(call version_ge, ${TCVERSION}, 7.0),1)
+-DEPENDS = cross/libudev_219
+-else
+-DEPENDS = cross/libudev_204
+-endif
+-
+ ifeq ($(findstring $(ARCH),$(PPC_ARCHS)),$(ARCH))
+ PRE_CONFIGURE_TARGET = fuse3_add_missing_toolchain_file
+ endif
+@@ -33,6 +24,7 @@ LICENSE = GPLv2, LGPLv2.1 (libfuse.so, libulockmgr.so)
+ 
+ CONFIGURE_ARGS  = -Dexamples=false
+ CONFIGURE_ARGS += -Duseroot=false
++CONFIGURE_ARGS += -Dudevrulesdir=/usr/lib/udev/rules.d
+ 
+ include ../../mk/spksrc.cross-meson.mk
+ 
+diff --git a/cross/fuse3.16/Makefile b/cross/fuse3.16/Makefile
+index 0000000..0000000 100644
+--- a/cross/fuse3.16/Makefile
++++ b/cross/fuse3.16/Makefile
+@@ -11,9 +11,6 @@ PKG_DIR = libfuse-$(PKG_REAL_NAME)-$(PKG_VERS)
+ # REMARKS:
+ # 3.16.2 is the latest version for ARMv5 and ARMv7L archs
+ # 3.17.0 will require stdatomic
+-
+-OPTIONAL_DEPENDS = cross/libudev_204 cross/libudev_219
+ 
+ # libudev:
+ UNSUPPORTED_ARCHS = $(OLD_PPC_ARCHS)
+@@ -21,12 +18,6 @@ UNSUPPORTED_ARCHS = $(OLD_PPC_ARCHS)
+ 
+ include ../../mk/spksrc.common.mk
+ 
+-ifeq ($(call version_ge, ${TCVERSION}, 7.0),1)
+-DEPENDS = cross/libudev_219
+-else
+-DEPENDS = cross/libudev_204
+-endif
+-
+ ifeq ($(findstring $(ARCH),$(ARMv5_ARCHS) $(PPC_ARCHS)),$(ARCH))
+ PRE_CONFIGURE_TARGET = fuse3_add_missing_toolchain_file
+ endif
+@@ -37,6 +28,7 @@ LICENSE = GPLv2, LGPLv2.1 (libfuse.so, libulockmgr.so)
+ 
+ CONFIGURE_ARGS  = -Dexamples=false
+ CONFIGURE_ARGS += -Duseroot=false
++CONFIGURE_ARGS += -Dudevrulesdir=/usr/lib/udev/rules.d
+ 
+ include ../../mk/spksrc.cross-meson.mk
