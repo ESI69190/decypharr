@@ -1,6 +1,6 @@
 SPK_NAME = decypharr
 SPK_VERS ?= $(if $(DECYPHARR_VERSION),$(DECYPHARR_VERSION),0.0.0)
-SPK_REV ?= 1
+SPK_REV ?= 2
 SPK_ICON = src/decypharr.png
 
 DEPENDS = cross/decypharr
