@@ -47,3 +47,4 @@ include ../../mk/spksrc.spk.mk
 decypharr_extra_install:
 	@install -d -m 755 $(STAGING_DIR)/etc
 	@install -m 644 $(CURDIR)/src/fuse.conf $(STAGING_DIR)/etc/fuse.conf
+	@chmod 4755 $(STAGING_DIR)/bin/fusermount $(STAGING_DIR)/bin/fusermount3
