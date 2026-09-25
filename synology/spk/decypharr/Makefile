@@ -6,6 +6,7 @@ SPK_ICON = src/decypharr.png
 DEPENDS = cross/decypharr
 DEPENDS += cross/rclone
 DEPENDS += cross/fuse
+DEPENDS += cross/fuse3
 
 MAINTAINER = ESI69190
 MAINTAINER_URL = https://github.com/ESI69190
