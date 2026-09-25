@@ -13,8 +13,16 @@ DEPENDS = cross/fuse
 
 CGO_ENABLED = 1
 
-REQUIRED_MIN_DSM = 7.0
-REQUIRED_MIN_SRM = 1.2
+# cgofuse uses FUSE 2 headers on Linux by default. cross/fuse stages them under
+# <staging>/include/fuse, outside the compiler's default sysroot include path.
+# spksrc does not add dependency include/lib paths to CGO automatically.
+CGO_CFLAGS = -I$(STAGING_INSTALL_PREFIX)/include/fuse -I$(STAGING_INSTALL_PREFIX)/include
+CGO_LDFLAGS = -L$(STAGING_INSTALL_PREFIX)/lib
+ENV += CGO_CFLAGS="$(CGO_CFLAGS)"
+ENV += CGO_LDFLAGS="$(CGO_LDFLAGS)"
+
+REQUIRED_MIN_DSM = 7.1
+REQUIRED_MIN_SRM = 1.3
 UNSUPPORTED_ARCHS = $(PPC_ARCHS) $(ARMv5_ARCHS)
 
 HOMEPAGE = https://github.com/ESI69190/decypharr
