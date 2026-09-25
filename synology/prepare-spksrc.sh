@@ -15,6 +15,8 @@ fi
 git -C "${SPKSRC_DIR}" fetch --depth=1 origin "${SPKSRC_REF}"
 git -C "${SPKSRC_DIR}" checkout --detach FETCH_HEAD
 
+git -C "${SPKSRC_DIR}" apply --whitespace=nowarn "${ROOT_DIR}/synology/patches/spksrc-fuse3-no-udev.patch"
+
 rm -rf "${SPKSRC_DIR}/cross/decypharr" "${SPKSRC_DIR}/cross/rapidyenc" "${SPKSRC_DIR}/spk/decypharr"
 mkdir -p "${SPKSRC_DIR}/cross/decypharr" "${SPKSRC_DIR}/cross/rapidyenc" "${SPKSRC_DIR}/spk/decypharr/src"
 
