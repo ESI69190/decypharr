@@ -37,10 +37,33 @@ configure_fuse_helpers()
     done
 }
 
+configure_fuse_conf()
+{
+    # Decypharr requests AllowOther for its rclone mount so Sonarr, Radarr,
+    # Plex and other DSM services can access the mounted filesystem.
+    # fusermount/fusermount3 permit this for a non-root package user only
+    # when user_allow_other is enabled globally in /etc/fuse.conf.
+    fuse_conf="/etc/fuse.conf"
+
+    if [ ! -e "${fuse_conf}" ]; then
+        touch "${fuse_conf}"
+        chmod 0644 "${fuse_conf}"
+    fi
+
+    if ! grep -Eq '^[[:space:]]*user_allow_other([[:space:]]|$)' "${fuse_conf}"; then
+        {
+            echo ""
+            echo "# Required by Decypharr for shared FUSE mounts"
+            echo "user_allow_other"
+        } >> "${fuse_conf}"
+    fi
+}
+
 service_postinst()
 {
     create_decypharr_directories
     configure_fuse_helpers
+    configure_fuse_conf
 }
 
 service_postupgrade()
@@ -49,4 +72,5 @@ service_postupgrade()
     # introduced by newer package revisions.
     create_decypharr_directories
     configure_fuse_helpers
+    configure_fuse_conf
 }
