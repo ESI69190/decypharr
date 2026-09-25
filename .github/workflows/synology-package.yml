@@ -1,4 +1,4 @@
-name: Synology DSM and SRM packages
+name: Synology DSM 7.x and SRM 1.x packages
 
 on:
   workflow_dispatch:
@@ -12,6 +12,7 @@ on:
   push:
     branches:
       - main
+      - 'synology-*'
     tags:
       - 'v*'
     paths:
@@ -32,99 +33,12 @@ env:
   SPKSRC_REF: e353e52f6117f59326550ece07ca0c68903a57fc
 
 jobs:
-  build:
-    name: ${{ matrix.platform }} ${{ matrix.version }} / ${{ matrix.arch }}
+  smoke:
+    name: Smoke / DSM 7.1 apollolake
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        include:
-          - platform: DSM
-            version: '7.0'
-            arch: x64
-            target: x64-7.0
-          - platform: DSM
-            version: '7.0'
-            arch: aarch64
-            target: aarch64-7.0
-          - platform: DSM
-            version: '7.0'
-            arch: armv7
-            target: armv7-7.0
-          - platform: DSM
-            version: '7.0'
-            arch: evansport
-            target: evansport-7.0
-          - platform: DSM
-            version: '7.0'
-            arch: comcerto2k
-            target: comcerto2k-7.0
-
-          - platform: DSM
-            version: '7.1'
-            arch: x64
-            target: x64-7.1
-          - platform: DSM
-            version: '7.1'
-            arch: aarch64
-            target: aarch64-7.1
-          - platform: DSM
-            version: '7.1'
-            arch: armv7
-            target: armv7-7.1
-          - platform: DSM
-            version: '7.1'
-            arch: evansport
-            target: evansport-7.1
-          - platform: DSM
-            version: '7.1'
-            arch: comcerto2k
-            target: comcerto2k-7.1
-
-          - platform: DSM
-            version: '7.2'
-            arch: x64
-            target: x64-7.2
-          - platform: DSM
-            version: '7.2'
-            arch: aarch64
-            target: aarch64-7.2
-          - platform: DSM
-            version: '7.2'
-            arch: armv7
-            target: armv7-7.2
-
-          - platform: DSM
-            version: '7.3'
-            arch: x64
-            target: x64-7.3
-          - platform: DSM
-            version: '7.3'
-            arch: aarch64
-            target: aarch64-7.3
-          - platform: DSM
-            version: '7.3'
-            arch: armv7
-            target: armv7-7.3
-
-          - platform: SRM
-            version: '1.2'
-            arch: armv7
-            target: armv7-1.2
-
-          - platform: SRM
-            version: '1.3'
-            arch: aarch64
-            target: aarch64-1.3
-          - platform: SRM
-            version: '1.3'
-            arch: armv7
-            target: armv7-1.3
-
     steps:
       - name: Checkout Decypharr
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -137,7 +51,248 @@ jobs:
           else
             VERSION="0.0.0.dev${GITHUB_RUN_NUMBER}"
           fi
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
 
+      - name: Prepare pinned spksrc tree
+        env:
+          DECYPHARR_GIT_HASH: ${{ steps.meta.outputs.source_sha }}
+          SPKSRC_DIR: ${{ github.workspace }}/.synology-build/spksrc
+        run: bash synology/prepare-spksrc.sh
+
+      - name: Cache apollolake toolchain and Go modules
+        uses: actions/cache@v6
+        with:
+          path: |
+            .synology-build/spksrc/toolchain/*/work
+            .synology-build/spksrc/distrib/go
+          key: synology-apollolake-7.1-${{ hashFiles('go.sum', 'synology/cross/decypharr/Makefile', 'synology/spk/decypharr/Makefile') }}
+          restore-keys: |
+            synology-apollolake-7.1-
+
+      - name: Build apollolake SPK
+        env:
+          DECYPHARR_GIT_HASH: ${{ steps.meta.outputs.source_sha }}
+          DECYPHARR_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          docker run --rm \
+            -e DECYPHARR_GIT_HASH \
+            -e DECYPHARR_VERSION \
+            -v "${PWD}/.synology-build/spksrc:/spksrc" \
+            -w /spksrc \
+            ghcr.io/synocommunity/spksrc:latest \
+            make -C spk/decypharr arch-apollolake-7.1 SPK_PACKAGE_ARCHS=apollolake
+
+      - name: Collect apollolake package
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          mkdir -p out
+          mapfile -t packages < <(find .synology-build/spksrc/packages -maxdepth 1 -type f -name 'decypharr*.spk' -print | sort)
+
+          if [[ "${#packages[@]}" -ne 1 ]]; then
+            echo "::error::Expected exactly one Decypharr SPK, found ${#packages[@]}"
+            printf '%s\n' "${packages[@]}"
+            exit 1
+          fi
+
+          OUTPUT="out/decypharr-${VERSION}-dsm7.1-apollolake.spk"
+          cp "${packages[0]}" "${OUTPUT}"
+          sha256sum "${OUTPUT}" > "${OUTPUT}.sha256"
+
+      - name: Upload apollolake SPK
+        uses: actions/upload-artifact@v7
+        with:
+          name: synology-DSM-7.1-apollolake
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload smoke diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: diagnostics-smoke-apollolake
+          path: |
+            .synology-build/spksrc/spk/decypharr/*.log
+            .synology-build/spksrc/spk/decypharr/work-*/INFO
+            .synology-build/spksrc/spk/decypharr/work-*/PLIST
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
+
+  build:
+    name: ${{ matrix.platform }} ${{ matrix.version }} / ${{ matrix.arch }}
+    needs: smoke
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          # DSM 7.x packages are built against the DSM 7.1 toolchains requested
+          # for the corresponding Synology package architecture.
+          - platform: DSM
+            version: '7.1'
+            arch: avoton
+            build_target: avoton-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: braswell
+            build_target: braswell-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: broadwell
+            build_target: broadwell-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: broadwellnk
+            build_target: broadwellnk-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: broadwellnkv2
+            build_target: broadwellnkv2-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: broadwellntbap
+            build_target: broadwellntbap-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: bromolow
+            build_target: bromolow-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: cedarview
+            build_target: cedarview-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: denverton
+            build_target: denverton-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: epyc7002
+            build_target: epyc7002-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: geminilake
+            build_target: geminilake-7.1
+
+          # These architecture names are valid DSM package architectures in
+          # the DSM 7.1 generic x64 toolchain, but spksrc has no dedicated
+          # syno-<arch>-7.1 toolchain directory for them.
+          - platform: DSM
+            version: '7.1'
+            arch: geminilakenk
+            build_target: x64-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: grantley
+            build_target: grantley-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: icelaked
+            build_target: x64-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: kvmx64
+            build_target: kvmx64-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: purley
+            build_target: purley-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: r1000
+            build_target: r1000-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: r1000nk
+            build_target: x64-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: v1000
+            build_target: v1000-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: v1000nk
+            build_target: x64-7.1
+
+          - platform: DSM
+            version: '7.1'
+            arch: alpine
+            build_target: alpine-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: alpine4k
+            build_target: alpine4k-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: armada370
+            build_target: armada370-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: armada375
+            build_target: armada375-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: armada38x
+            build_target: armada38x-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: armadaxp
+            build_target: armadaxp-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: monaco
+            build_target: monaco-7.1
+
+          - platform: DSM
+            version: '7.1'
+            arch: armada37xx
+            build_target: armada37xx-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: rtd1296
+            build_target: rtd1296-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: rtd1619b
+            build_target: rtd1619b-7.1
+          - platform: DSM
+            version: '7.1'
+            arch: evansport
+            build_target: evansport-7.1
+
+          # SRM 1.x targets requested: all use the SRM 1.3 toolchains.
+          - platform: SRM
+            version: '1.3'
+            arch: dakota
+            build_target: dakota-1.3
+          - platform: SRM
+            version: '1.3'
+            arch: ipq806x
+            build_target: ipq806x-1.3
+          - platform: SRM
+            version: '1.3'
+            arch: cypress
+            build_target: cypress-1.3
+
+    steps:
+      - name: Checkout Decypharr
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Derive package version
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="0.0.0.dev${GITHUB_RUN_NUMBER}"
+          fi
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
           echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
 
@@ -148,30 +303,34 @@ jobs:
         run: bash synology/prepare-spksrc.sh
 
       - name: Cache spksrc toolchain and Go modules
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             .synology-build/spksrc/toolchain/*/work
             .synology-build/spksrc/distrib/go
-          key: synology-${{ matrix.target }}-${{ hashFiles('go.sum', 'synology/cross/decypharr/Makefile', 'synology/spk/decypharr/Makefile') }}
+          key: synology-${{ matrix.build_target }}-${{ hashFiles('go.sum', 'synology/cross/decypharr/Makefile', 'synology/spk/decypharr/Makefile') }}
           restore-keys: |
-            synology-${{ matrix.target }}-
+            synology-${{ matrix.build_target }}-
 
       - name: Build SPK
         env:
           DECYPHARR_GIT_HASH: ${{ steps.meta.outputs.source_sha }}
           DECYPHARR_VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          docker run --rm             -e DECYPHARR_GIT_HASH             -e DECYPHARR_VERSION             -v "${PWD}/.synology-build/spksrc:/spksrc"             -w /spksrc             ghcr.io/synocommunity/spksrc:latest             make -C spk/decypharr "arch-${{ matrix.target }}"
+          docker run --rm \
+            -e DECYPHARR_GIT_HASH \
+            -e DECYPHARR_VERSION \
+            -v "${PWD}/.synology-build/spksrc:/spksrc" \
+            -w /spksrc \
+            ghcr.io/synocommunity/spksrc:latest \
+            make -C spk/decypharr "arch-${{ matrix.build_target }}" "SPK_PACKAGE_ARCHS=${{ matrix.arch }}"
 
       - name: Collect package
-        id: package
         shell: bash
         env:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           mkdir -p out
-
           mapfile -t packages < <(find .synology-build/spksrc/packages -maxdepth 1 -type f -name 'decypharr*.spk' -print | sort)
 
           if [[ "${#packages[@]}" -ne 1 ]]; then
@@ -186,40 +345,35 @@ jobs:
           cp "${packages[0]}" "${OUTPUT}"
           sha256sum "${OUTPUT}" > "${OUTPUT}.sha256"
 
-          echo "file=${OUTPUT}" >> "${GITHUB_OUTPUT}"
-
       - name: Upload SPK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: synology-${{ matrix.platform }}-${{ matrix.version }}-${{ matrix.arch }}
           path: out/*
           if-no-files-found: error
           retention-days: 30
 
-      - name: Collect build diagnostics
-        if: failure()
-        shell: bash
-        run: |
-          mkdir -p diagnostics
-          find .synology-build/spksrc/spk/decypharr             -type f \( -name '*.log' -o -name 'INFO' -o -name 'PLIST' \)             -exec cp --parents {} diagnostics/ \; 2>/dev/null || true
-
       - name: Upload diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: diagnostics-${{ matrix.platform }}-${{ matrix.version }}-${{ matrix.arch }}
-          path: diagnostics/
+          path: |
+            .synology-build/spksrc/spk/decypharr/*.log
+            .synology-build/spksrc/spk/decypharr/work-*/INFO
+            .synology-build/spksrc/spk/decypharr/work-*/PLIST
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
 
   release:
     name: Attach Synology packages to release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [smoke, build]
     runs-on: ubuntu-latest
     steps:
       - name: Download all Synology artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: synology-*
           path: release
@@ -237,9 +391,6 @@ jobs:
           TAG: ${{ github.ref_name }}
         shell: bash
         run: |
-          # The main release workflow normally creates the release first. The
-          # Synology build is slower, so wait briefly for that release and only
-          # create it ourselves if it still does not exist.
           for attempt in {1..40}; do
             if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
               break
@@ -248,7 +399,12 @@ jobs:
           done
 
           if ! gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release create "${TAG}"               --repo "${GITHUB_REPOSITORY}"               --title "decypharr ${TAG}"               --generate-notes
+            gh release create "${TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "decypharr ${TAG}" \
+              --generate-notes
           fi
 
-          gh release upload "${TAG}" release/*.spk release/SHA256SUMS             --repo "${GITHUB_REPOSITORY}"             --clobber
+          gh release upload "${TAG}" release/*.spk release/SHA256SUMS \
+            --repo "${GITHUB_REPOSITORY}" \
+            --clobber
