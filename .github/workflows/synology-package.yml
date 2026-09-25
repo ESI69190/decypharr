@@ -34,7 +34,7 @@ env:
 
 jobs:
   smoke:
-    name: Smoke / DSM 7.1 apollolake
+    name: Smoke / DSM 7.3 apollolake
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Decypharr
@@ -66,9 +66,9 @@ jobs:
           path: |
             .synology-build/spksrc/toolchain/*/work
             .synology-build/spksrc/distrib/go
-          key: synology-apollolake-7.1-${{ hashFiles('go.sum', 'synology/cross/decypharr/Makefile', 'synology/spk/decypharr/Makefile') }}
+          key: synology-apollolake-7.3-${{ hashFiles('go.sum', 'synology/cross/decypharr/Makefile', 'synology/spk/decypharr/Makefile') }}
           restore-keys: |
-            synology-apollolake-7.1-
+            synology-apollolake-7.3-
 
       - name: Build apollolake SPK
         env:
@@ -81,7 +81,7 @@ jobs:
             -v "${PWD}/.synology-build/spksrc:/spksrc" \
             -w /spksrc \
             ghcr.io/synocommunity/spksrc:latest \
-            make -C spk/decypharr arch-apollolake-7.1 SPK_PACKAGE_ARCHS=apollolake
+            make -C spk/decypharr arch-apollolake-7.3 SPK_PACKAGE_ARCHS=apollolake
 
       - name: Collect apollolake package
         shell: bash
@@ -97,7 +97,7 @@ jobs:
             exit 1
           fi
 
-          OUTPUT="out/decypharr-${VERSION}-dsm7.1-apollolake.spk"
+          OUTPUT="out/decypharr-${VERSION}-dsm7.3-apollolake.spk"
           cp "${packages[0]}" "${OUTPUT}"
           sha256sum "${OUTPUT}" > "${OUTPUT}.sha256"
 
@@ -131,140 +131,118 @@ jobs:
       max-parallel: 20
       matrix:
         include:
-          # DSM 7.x packages are built against the DSM 7.1 toolchains requested
-          # for the corresponding Synology package architecture.
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
+            arch: apollolake
+            build_target: apollolake-7.3
+          - platform: DSM
+            version: '7.3'
             arch: avoton
-            build_target: avoton-7.1
+            build_target: avoton-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: braswell
-            build_target: braswell-7.1
+            build_target: braswell-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: broadwell
-            build_target: broadwell-7.1
+            build_target: broadwell-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: broadwellnk
-            build_target: broadwellnk-7.1
+            build_target: broadwellnk-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: broadwellnkv2
-            build_target: broadwellnkv2-7.1
+            build_target: broadwellnkv2-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: broadwellntbap
-            build_target: broadwellntbap-7.1
+            build_target: broadwellntbap-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: bromolow
-            build_target: bromolow-7.1
+            build_target: bromolow-7.3
           - platform: DSM
-            version: '7.1'
-            arch: cedarview
-            build_target: cedarview-7.1
-          - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: denverton
-            build_target: denverton-7.1
+            build_target: denverton-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: epyc7002
-            build_target: epyc7002-7.1
+            build_target: epyc7002-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
+            arch: epyc7003
+            build_target: epyc7003-7.3
+          - platform: DSM
+            version: '7.3'
+            arch: epyc7003ntb
+            build_target: x64-7.3
+          - platform: DSM
+            version: '7.3'
             arch: geminilake
-            build_target: geminilake-7.1
-
-          # These architecture names are valid DSM package architectures in
-          # the DSM 7.1 generic x64 toolchain, but spksrc has no dedicated
-          # syno-<arch>-7.1 toolchain directory for them.
+            build_target: geminilake-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: geminilakenk
-            build_target: x64-7.1
+            build_target: geminilakenk-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: grantley
-            build_target: grantley-7.1
+            build_target: grantley-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: icelaked
-            build_target: x64-7.1
+            build_target: x64-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: kvmx64
-            build_target: kvmx64-7.1
+            build_target: kvmx64-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: purley
-            build_target: purley-7.1
+            build_target: purley-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: r1000
-            build_target: r1000-7.1
+            build_target: r1000-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: r1000nk
-            build_target: x64-7.1
+            build_target: r1000nk-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: v1000
-            build_target: v1000-7.1
+            build_target: v1000-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: v1000nk
-            build_target: x64-7.1
-
+            build_target: v1000nk-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: alpine
-            build_target: alpine-7.1
+            build_target: alpine-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: alpine4k
-            build_target: alpine4k-7.1
+            build_target: alpine4k-7.3
           - platform: DSM
-            version: '7.1'
-            arch: armada370
-            build_target: armada370-7.1
-          - platform: DSM
-            version: '7.1'
-            arch: armada375
-            build_target: armada375-7.1
-          - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: armada38x
-            build_target: armada38x-7.1
+            build_target: armada38x-7.3
           - platform: DSM
-            version: '7.1'
-            arch: armadaxp
-            build_target: armadaxp-7.1
-          - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: monaco
-            build_target: monaco-7.1
-
+            build_target: monaco-7.3
           - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: armada37xx
-            build_target: armada37xx-7.1
+            build_target: armada37xx-7.3
           - platform: DSM
-            version: '7.1'
-            arch: rtd1296
-            build_target: rtd1296-7.1
-          - platform: DSM
-            version: '7.1'
+            version: '7.3'
             arch: rtd1619b
-            build_target: rtd1619b-7.1
-          - platform: DSM
-            version: '7.1'
-            arch: evansport
-            build_target: evansport-7.1
-
-          # SRM 1.x targets requested: all use the SRM 1.3 toolchains.
+            build_target: rtd1619b-7.3
           - platform: SRM
             version: '1.3'
             arch: dakota
