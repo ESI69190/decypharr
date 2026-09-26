@@ -1,6 +1,19 @@
 # Decypharr for Synology DSM 7.x and SRM 1.x
 
-Current stable release line: **2.5**. The Synology FUSE compatibility candidate is **2.5.1**.
+Current stable release line: **2.5.1**.
+
+## Why 2.5.1?
+
+Version 2.5.1 is a Synology compatibility release focused on DSM 7.3 systems using older Linux 3.10 kernels. With Decypharr 2.5, the Hanwen FUSE backend could create a `fuse.decypharr` mount but then disconnect from userspace, leaving the mount in a `Transport endpoint is not connected` state.
+
+The fix combines:
+
+- pinning `github.com/hanwen/go-fuse/v2` to **v2.5.1**;
+- Synology-only conservative FUSE initialization values (`MaxWrite=128 KiB`, `MaxBackground=12`, `MaxReadAhead=128 KiB`);
+- improved `/dev/fuse` and package-local `fuse.conf` diagnostics in `decypharr-fuse-fix`;
+- documented DSM ACL requirements for Sonarr, Radarr, Bazarr and Plex to traverse the shared-folder parents and read the FUSE mount.
+
+The fix was validated on DSM 7.3.1 / DS1817+ (Avoton): the mount remains connected and is readable by Sonarr and Radarr after the required Synology ACLs are applied.
 
 This directory contains a SynoCommunity **spksrc overlay** for building Decypharr as a native Synology package (`.spk`).
 
@@ -116,7 +129,7 @@ The package does not hard-code these ACLs because the shared-folder and mount pa
 
 ### DSM Hanwen compatibility mode
 
-The native Synology service enables `DECYPHARR_SYNOLOGY_FUSE_COMPAT=1`. This keeps Hanwen/go-fuse at the upstream 2.8.0 dependency while using a conservative FUSE handshake on DSM:
+The native Synology service enables `DECYPHARR_SYNOLOGY_FUSE_COMPAT=1`. Decypharr 2.5.1 pins `github.com/hanwen/go-fuse/v2` to **v2.5.1** after runtime validation showed that v2.8.0 could leave a DSM 7.3 mount disconnected on older Synology 3.10 kernels. The Synology service also uses a conservative FUSE handshake:
 
 ```text
 MaxWrite       = 128 KiB
@@ -199,7 +212,7 @@ Then build a target, for example:
 SHA="$(git rev-parse HEAD)"
 
 DECYPHARR_GIT_HASH="$SHA" \
-DECYPHARR_VERSION="2.5" \
+DECYPHARR_VERSION="2.5.1" \
 make -C .synology-build/spksrc/spk/decypharr \
   arch-apollolake-7.3 \
   SPK_PACKAGE_ARCHS=apollolake
