@@ -76,18 +76,29 @@ func (b *Backend) Mount(ctx context.Context) error {
 	// Try to unmount if already mounted
 	b.forceUnmount(ctx)
 
+	maxWrite := 1024 * 1024
+	maxBackground := b.config.FuseMaxBackground
+	maxReadAhead := b.config.FuseMaxReadAhead
+
+	// DSM 7 on older Synology kernels can reject aggressive FUSE_INIT values
+	// with EINVAL. Keep the generic Linux defaults unchanged, but use a
+	// conservative handshake for the native Synology package.
+	if os.Getenv("DECYPHARR_SYNOLOGY_FUSE_COMPAT") == "1" {
+		maxWrite = 128 * 1024
+		maxBackground = 12
+		maxReadAhead = 128 * 1024
+	}
+
 	mountOpt := fuse.MountOptions{
 		FsName:               "decypharr",
 		Debug:                false,
 		Name:                 "decypharr",
 		DisableXAttrs:        true,
 		IgnoreSecurityLabels: true,
-		MaxWrite:             1024 * 1024,
-		// The kernel defaults MaxBackground to 12, which caps in-flight
-		// readahead far below the VFS readahead window.
-		MaxBackground: b.config.FuseMaxBackground,
-		MaxReadAhead:  b.config.FuseMaxReadAhead,
-		AllowOther:    true,
+		MaxWrite:             maxWrite,
+		MaxBackground:        maxBackground,
+		MaxReadAhead:         maxReadAhead,
+		AllowOther:           true,
 	}
 
 	var opt []string
