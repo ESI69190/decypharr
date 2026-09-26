@@ -89,7 +89,7 @@ rm -f /volume1/VideoFactory/_Decypharr/mount/.write-test
 Sonarr and Radarr also need to traverse the Synology shared-folder parents before the kernel can reach the FUSE mount. With `allow_other`, the FUSE root itself is readable according to its exposed POSIX modes, so only parent traversal/browsing permissions are required:
 
 ```bash
-for user in sc-sonarr sc-radarr; do
+for user in sc-sonarr sc-radarr sc-bazarr PlexMediaServer; do
     /usr/syno/bin/synoacltool -add \
       /volume1/VideoFactory \
       "user:${user}:allow:--x----------:---n"
@@ -103,7 +103,7 @@ done
 Validate with:
 
 ```bash
-for user in sc-sonarr sc-radarr; do
+for user in sc-sonarr sc-radarr sc-bazarr PlexMediaServer; do
     echo "===== ${user} ====="
     sudo -u "${user}" ls -la \
       /volume1/VideoFactory/_Decypharr/mount
