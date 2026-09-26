@@ -2,12 +2,18 @@ name: Release
 
 on:
   push:
+    branches:
+      - 'release-v*'
     tags:
       - 'v*'
 
 permissions:
   contents: write
   packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
   REGISTRY_GHCR: ghcr.io/esi69190/decypharr
@@ -19,15 +25,26 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
+      tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
       channel: ${{ steps.meta.outputs.channel }}
     steps:
       - name: Extract version and channel
         id: meta
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          elif [[ "${GITHUB_REF}" == refs/heads/release-v* ]]; then
+            TAG="${GITHUB_REF_NAME#release-}"
+          else
+            echo "Unsupported release ref: ${GITHUB_REF}" >&2
+            exit 1
+          fi
+
           VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
           if [[ "$TAG" == *"-beta"* ]]; then
             echo "channel=beta" >> "$GITHUB_OUTPUT"
           elif [[ "$TAG" == *"-rc"* ]]; then
@@ -213,7 +230,7 @@ jobs:
             VERSION=${{ needs.prepare.outputs.version }}
             CHANNEL=${{ needs.prepare.outputs.channel }}
           tags: |
-            ${{ env.REGISTRY_GHCR }}:${{ github.ref_name }}
+            ${{ env.REGISTRY_GHCR }}:${{ needs.prepare.outputs.tag }}
             ${{ env.REGISTRY_GHCR }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -229,7 +246,7 @@ jobs:
             VERSION=${{ needs.prepare.outputs.version }}
             CHANNEL=${{ needs.prepare.outputs.channel }}
           tags: |
-            ${{ env.REGISTRY_HUB }}:${{ github.ref_name }}
+            ${{ env.REGISTRY_HUB }}:${{ needs.prepare.outputs.tag }}
             ${{ env.REGISTRY_HUB }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -252,7 +269,7 @@ jobs:
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.prepare.outputs.tag }}
           CHANNEL: ${{ needs.prepare.outputs.channel }}
         run: |
           PRERELEASE=""
@@ -260,8 +277,28 @@ jobs:
             PRERELEASE="--prerelease"
           fi
 
-          gh release create "$TAG" dist/* \
-            --title "decypharr ${TAG}" \
-            --generate-notes \
-            $PRERELEASE \
-            --notes-start-tag "$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")"
+          PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+
+          if gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber
+          else
+            TARGET_ARGS=()
+            if [[ "${GITHUB_REF}" == refs/heads/release-v* ]]; then
+              TARGET_ARGS=(--target "${GITHUB_SHA}")
+            fi
+
+            NOTES_ARGS=()
+            if [[ -n "${PREVIOUS_TAG}" ]]; then
+              NOTES_ARGS=(--notes-start-tag "${PREVIOUS_TAG}")
+            fi
+
+            gh release create "$TAG" dist/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "decypharr ${TAG}" \
+              --generate-notes \
+              "${TARGET_ARGS[@]}" \
+              "${NOTES_ARGS[@]}" \
+              $PRERELEASE
+          fi
