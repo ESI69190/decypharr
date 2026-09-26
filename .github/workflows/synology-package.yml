@@ -34,7 +34,7 @@ concurrency:
 
 env:
   SPKSRC_REF: e353e52f6117f59326550ece07ca0c68903a57fc
-  DECYPHARR_BASE_VERSION: "2.5"
+  DECYPHARR_BASE_VERSION: "2.5.1"
 
 jobs:
   smoke:
