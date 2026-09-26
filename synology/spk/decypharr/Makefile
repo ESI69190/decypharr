@@ -1,6 +1,6 @@
 SPK_NAME = decypharr
 SPK_VERS ?= $(if $(DECYPHARR_VERSION),$(DECYPHARR_VERSION),0.0.0)
-SPK_REV ?= 2
+SPK_REV ?= 1
 SPK_ICON = src/decypharr.png
 
 DEPENDS = cross/decypharr
@@ -29,9 +29,8 @@ ADMIN_PORT = $(SERVICE_PORT)
 REQUIRED_MIN_DSM = 7.3
 REQUIRED_MIN_SRM = 1.3
 
-# DSM 7.3.1 build 86003 is a supported runtime target. The 7.3 toolchain
-# currently advertises 7.3-86009, which makes DSM reject the SPK before
-# installation even though we intentionally support the earlier 7.3.1 build.
+# DSM 7.3.1 build 86003 is an explicitly validated runtime target.
+# Keep the package compatibility floor aligned with the oldest tested DSM 7.3.1 build.
 ifeq ($(TCVERSION),7.3)
 OS_MIN_VER = 7.3-86003
 endif
