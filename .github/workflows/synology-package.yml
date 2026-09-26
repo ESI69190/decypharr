@@ -6,6 +6,7 @@ on:
     paths:
       - 'synology/**'
       - '.github/workflows/synology-package.yml'
+      - 'pkg/server/assets/**'
       - '**/*.go'
       - 'go.mod'
       - 'go.sum'
@@ -18,6 +19,7 @@ on:
     paths:
       - 'synology/**'
       - '.github/workflows/synology-package.yml'
+      - 'pkg/server/assets/**'
       - '**/*.go'
       - 'go.mod'
       - 'go.sum'
