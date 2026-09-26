@@ -50,6 +50,28 @@ echo "FUSE configuration:"
 cat "${FUSE_CONF}"
 
 echo
+echo "FUSE device:"
+ls -l /dev/fuse
+
+if command -v sudo >/dev/null 2>&1; then
+    echo
+    echo "Package-user FUSE access:"
+    if sudo -u sc-decypharr sh -c 'test -r /dev/fuse && test -w /dev/fuse'; then
+        echo "sc-decypharr can read and write /dev/fuse"
+    else
+        echo "Warning: sc-decypharr cannot read/write /dev/fuse" >&2
+    fi
+
+    echo
+    echo "Package-local fuse.conf access:"
+    if sudo -u sc-decypharr cat "${FUSE_CONF}" >/dev/null 2>&1; then
+        echo "sc-decypharr can read ${FUSE_CONF}"
+    else
+        echo "Warning: sc-decypharr cannot read ${FUSE_CONF}" >&2
+    fi
+fi
+
+echo
 echo "Restarting Decypharr..."
 ${SUDO} synopkg restart "${PKG_NAME}"
 echo
