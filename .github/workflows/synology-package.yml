@@ -14,6 +14,7 @@ on:
     branches:
       - main
       - 'synology-*'
+      - 'release-v*'
     tags:
       - 'v*'
     paths:
@@ -51,6 +52,8 @@ jobs:
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
+          elif [[ "${GITHUB_REF}" == refs/heads/release-v* ]]; then
+            VERSION="${GITHUB_REF_NAME#release-v}"
           else
             VERSION="${DECYPHARR_BASE_VERSION}"
           fi
@@ -267,6 +270,8 @@ jobs:
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
+          elif [[ "${GITHUB_REF}" == refs/heads/release-v* ]]; then
+            VERSION="${GITHUB_REF_NAME#release-v}"
           else
             VERSION="${DECYPHARR_BASE_VERSION}"
           fi
@@ -345,7 +350,7 @@ jobs:
 
   release:
     name: Attach Synology packages to release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release-v')
     needs: [smoke, build]
     runs-on: ubuntu-latest
     steps:
@@ -365,9 +370,15 @@ jobs:
       - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          REF_NAME: ${{ github.ref_name }}
         shell: bash
         run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${REF_NAME}"
+          else
+            TAG="${REF_NAME#release-}"
+          fi
+
           for attempt in {1..40}; do
             if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
               break
@@ -376,10 +387,16 @@ jobs:
           done
 
           if ! gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            TARGET_ARGS=()
+            if [[ "${GITHUB_REF}" == refs/heads/release-v* ]]; then
+              TARGET_ARGS=(--target "${GITHUB_SHA}")
+            fi
+
             gh release create "${TAG}" \
               --repo "${GITHUB_REPOSITORY}" \
               --title "decypharr ${TAG}" \
-              --generate-notes
+              --generate-notes \
+              "${TARGET_ARGS[@]}"
           fi
 
           gh release upload "${TAG}" release/*.spk release/SHA256SUMS \
