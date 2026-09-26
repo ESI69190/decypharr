@@ -281,6 +281,7 @@ jobs:
           fi
 
           PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          RELEASE_NOTES=".github/release-notes/${TAG}.md"
 
           if gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* \
@@ -292,15 +293,16 @@ jobs:
               TARGET_ARGS=(--target "${GITHUB_SHA}")
             fi
 
-            NOTES_ARGS=()
-            if [[ -n "${PREVIOUS_TAG}" ]]; then
-              NOTES_ARGS=(--notes-start-tag "${PREVIOUS_TAG}")
+            NOTES_ARGS=(--generate-notes)
+            if [[ -f "${RELEASE_NOTES}" ]]; then
+              NOTES_ARGS=(--notes-file "${RELEASE_NOTES}")
+            elif [[ -n "${PREVIOUS_TAG}" ]]; then
+              NOTES_ARGS=(--generate-notes --notes-start-tag "${PREVIOUS_TAG}")
             fi
 
             gh release create "$TAG" dist/* \
               --repo "${GITHUB_REPOSITORY}" \
               --title "decypharr ${TAG}" \
-              --generate-notes \
               "${TARGET_ARGS[@]}" \
               "${NOTES_ARGS[@]}" \
               $PRERELEASE
