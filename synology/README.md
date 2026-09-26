@@ -1,5 +1,7 @@
 # Decypharr for Synology DSM 7.x and SRM 1.x
 
+Current release line: **2.5**.
+
 This directory contains a SynoCommunity **spksrc overlay** for building Decypharr as a native Synology package (`.spk`).
 
 The package layout follows the same model as the SynoCommunity packages for Bazarr, Sonarr and Radarr:
