@@ -1,6 +1,6 @@
 # Decypharr for Synology DSM 7.x and SRM 1.x
 
-Current release line: **2.5**.
+Current stable release line: **2.5**. The Synology FUSE compatibility candidate is **2.5.1**.
 
 This directory contains a SynoCommunity **spksrc overlay** for building Decypharr as a native Synology package (`.spk`).
 
@@ -63,6 +63,43 @@ stat -c '%A %a %U:%G %n' \
 sudo -u sc-decypharr \
   cat /var/packages/decypharr/target/etc/fuse.conf
 ```
+
+For DSM shared folders, the package user must also be able to traverse the shared-folder parent and read/write the Decypharr mount directory. For the validated `VideoFactory` layout:
+
+```bash
+mkdir -p /volume1/VideoFactory/_Decypharr/mount
+
+/usr/syno/bin/synoacltool -add \
+  /volume1/VideoFactory \
+  "user:sc-decypharr:allow:--x----------:---n"
+
+/usr/syno/bin/synoacltool -add \
+  /volume1/VideoFactory/_Decypharr \
+  "user:sc-decypharr:allow:rwxpdDaARWc--:fd--"
+
+/usr/syno/bin/synoacltool -add \
+  /volume1/VideoFactory/_Decypharr/mount \
+  "user:sc-decypharr:allow:rwxpdDaARWc--:fd--"
+
+sudo -u sc-decypharr touch \
+  /volume1/VideoFactory/_Decypharr/mount/.write-test
+rm -f /volume1/VideoFactory/_Decypharr/mount/.write-test
+```
+
+The package does not hard-code this ACL because the shared-folder and mount paths are user-specific.
+
+### DSM Hanwen compatibility mode
+
+The native Synology service enables `DECYPHARR_SYNOLOGY_FUSE_COMPAT=1`. This keeps Hanwen/go-fuse at the upstream 2.8.0 dependency while using a conservative FUSE handshake on DSM:
+
+```text
+MaxWrite       = 128 KiB
+MaxBackground  = 12
+MaxReadAhead   = 128 KiB
+AllowOther     = true
+```
+
+Generic Linux and Docker deployments keep the normal Decypharr FUSE settings.
 
 
 ## Supported package architectures
