@@ -119,9 +119,10 @@ broadwellnk
 broadwellnkv2
 broadwellntbap
 bromolow
-cedarview
 denverton
 epyc7002
+epyc7003
+epyc7003ntb
 geminilake
 geminilakenk
 grantley
@@ -134,18 +135,13 @@ v1000
 v1000nk
 alpine
 alpine4k
-armada370
-armada375
 armada38x
-armadaxp
 monaco
 armada37xx
-rtd1296
 rtd1619b
-evansport
 ```
 
-For `geminilakenk`, `icelaked`, `r1000nk` and `v1000nk`, spksrc does not provide a dedicated DSM 7.3 toolchain directory. Those packages therefore compile with the DSM 7.3 generic `x64` toolchain, whose architecture list explicitly includes those platforms, while `SPK_PACKAGE_ARCHS` restricts the generated package metadata to the requested platform.
+For `epyc7003ntb` and `icelaked`, the workflow uses the DSM 7.3 generic `x64` toolchain and restricts the generated package metadata with `SPK_PACKAGE_ARCHS`. The other listed targets use their dedicated DSM 7.3 toolchain.
 
 ### SRM 1.x
 
