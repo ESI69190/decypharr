@@ -138,7 +138,7 @@ Then build a target, for example:
 SHA="$(git rev-parse HEAD)"
 
 DECYPHARR_GIT_HASH="$SHA" \
-DECYPHARR_VERSION="0.0.0-dev" \
+DECYPHARR_VERSION="2.5" \
 make -C .synology-build/spksrc/spk/decypharr \
   arch-apollolake-7.3 \
   SPK_PACKAGE_ARCHS=apollolake
