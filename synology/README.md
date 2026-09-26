@@ -86,7 +86,33 @@ sudo -u sc-decypharr touch \
 rm -f /volume1/VideoFactory/_Decypharr/mount/.write-test
 ```
 
-The package does not hard-code this ACL because the shared-folder and mount paths are user-specific.
+Sonarr and Radarr also need to traverse the Synology shared-folder parents before the kernel can reach the FUSE mount. With `allow_other`, the FUSE root itself is readable according to its exposed POSIX modes, so only parent traversal/browsing permissions are required:
+
+```bash
+for user in sc-sonarr sc-radarr; do
+    /usr/syno/bin/synoacltool -add \
+      /volume1/VideoFactory \
+      "user:${user}:allow:--x----------:---n"
+
+    /usr/syno/bin/synoacltool -add \
+      /volume1/VideoFactory/_Decypharr \
+      "user:${user}:allow:r-x----------:---n"
+done
+```
+
+Validate with:
+
+```bash
+for user in sc-sonarr sc-radarr; do
+    echo "===== ${user} ====="
+    sudo -u "${user}" ls -la \
+      /volume1/VideoFactory/_Decypharr/mount
+    sudo -u "${user}" cat \
+      /volume1/VideoFactory/_Decypharr/mount/version.txt
+done
+```
+
+The package does not hard-code these ACLs because the shared-folder and mount paths are user-specific.
 
 ### DSM Hanwen compatibility mode
 
