@@ -186,6 +186,9 @@ func (d *Downloader) markAsError(entry *storage.Entry, err error) {
 // processSymlink creates symlinks for torrent files
 func (d *Downloader) processSymlink(entry *storage.Entry, mountPath string) error {
 	files := entry.GetActiveFiles()
+	if len(files) == 0 {
+		return fmt.Errorf("no active media files available for symlink action: %s", entry.Name)
+	}
 	torrentSymlinkPath := entry.DownloadPath()
 	d.logger.Info().Str("mount_path", mountPath).Msgf("Creating symlinks for %d files in %s", len(files), torrentSymlinkPath)
 
