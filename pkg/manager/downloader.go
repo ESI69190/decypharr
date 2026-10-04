@@ -192,10 +192,16 @@ func (d *Downloader) processSymlink(entry *storage.Entry, mountPath string) erro
 	torrentSymlinkPath := entry.DownloadPath()
 	d.logger.Info().Str("mount_path", mountPath).Msgf("Creating symlinks for %d files in %s", len(files), torrentSymlinkPath)
 
-	// Create symlink directory
+	// Create symlink directory. The Synology package runs with UMASK=022,
+	// so MkdirAll(..., 0777) would otherwise become 0755 and prevent the
+	// synocommunity group (Radarr/Sonarr) from deleting/moving symlinks after
+	// import. Re-assert 0775 on the leaf directory after creation.
 	err := os.MkdirAll(torrentSymlinkPath, os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create directory: %s: %v", torrentSymlinkPath, err)
+	}
+	if err := os.Chmod(torrentSymlinkPath, 0o775); err != nil {
+		return fmt.Errorf("failed to set directory permissions: %s: %v", torrentSymlinkPath, err)
 	}
 
 	filePaths, err := d.createSymlinksWhenMountFilesAppear(entry, files, mountPath, torrentSymlinkPath)
