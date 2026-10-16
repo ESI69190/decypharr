@@ -10,6 +10,7 @@ This directory contains a SynoCommunity **spksrc overlay** for building Decyphar
 - Port 8282 is exposed as the administration link.
 - rclone, FUSE 2 and FUSE 3 are packaged through spksrc.
 - The main Decypharr process remains unprivileged.
+- The current stable package line is based on upstream Decypharr v2.7.
 
 Typical DSM layout:
 
@@ -47,15 +48,17 @@ To avoid changing Decypharr's normal Linux/Docker dependency, the Synology build
 
 The upstream source tree and non-Synology builds remain unchanged.
 
-## Post-install FUSE helper
+## Runtime permission repair
 
-DSM 7 rejects third-party SPKs that declare broad root execution privileges. After each install or upgrade, run:
+The package reasserts the package-local FUSE helper permissions during install, upgrade and service start. It also repairs ownership of `config.json`, `auth.json` and `torrents.json` before startup so external automation cannot accidentally leave the service unable to read its own state.
+
+The manual helper remains available as a recovery/diagnostic command:
 
 ```bash
 /var/packages/decypharr/target/bin/decypharr-fuse-fix
 ```
 
-The helper elevates only `fusermount` and `fusermount3` to `root:root 4755`, validates `/dev/fuse` and the package-local `fuse.conf`, then restarts Decypharr.
+It validates `/dev/fuse`, the package-local `fuse.conf`, and the `fusermount` / `fusermount3` modes before restarting Decypharr.
 
 ## Shared-folder ACLs
 
