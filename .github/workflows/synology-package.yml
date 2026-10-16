@@ -39,100 +39,8 @@ env:
   DECYPHARR_BASE_VERSION: "2.7"
 
 jobs:
-  smoke:
-    name: Smoke / DSM 7.3 apollolake
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Decypharr
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Derive package version
-        id: meta
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          elif [[ "${GITHUB_REF}" == refs/heads/release-v* ]]; then
-            VERSION="${GITHUB_REF_NAME#release-v}"
-          else
-            VERSION="${DECYPHARR_BASE_VERSION}"
-          fi
-          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
-
-      - name: Prepare pinned spksrc tree
-        env:
-          DECYPHARR_GIT_HASH: ${{ steps.meta.outputs.source_sha }}
-          SPKSRC_DIR: ${{ github.workspace }}/.synology-build/spksrc
-        run: bash synology/prepare-spksrc.sh
-
-      - name: Cache apollolake toolchain and Go modules
-        uses: actions/cache@v6
-        with:
-          path: |
-            .synology-build/spksrc/toolchain/*/work
-            .synology-build/spksrc/distrib/go
-          key: synology-apollolake-7.3-${{ hashFiles('go.sum', 'synology/cross/decypharr/Makefile', 'synology/spk/decypharr/Makefile') }}
-          restore-keys: |
-            synology-apollolake-7.3-
-
-      - name: Build apollolake SPK
-        env:
-          DECYPHARR_GIT_HASH: ${{ steps.meta.outputs.source_sha }}
-          DECYPHARR_VERSION: ${{ steps.meta.outputs.version }}
-        run: |
-          docker run --rm \
-            -e DECYPHARR_GIT_HASH \
-            -e DECYPHARR_VERSION \
-            -v "${PWD}/.synology-build/spksrc:/spksrc" \
-            -w /spksrc \
-            ghcr.io/synocommunity/spksrc:latest \
-            make -C spk/decypharr arch-apollolake-7.3 SPK_PACKAGE_ARCHS=apollolake
-
-      - name: Collect apollolake package
-        shell: bash
-        env:
-          VERSION: ${{ steps.meta.outputs.version }}
-        run: |
-          mkdir -p out
-          mapfile -t packages < <(find .synology-build/spksrc/packages -maxdepth 1 -type f -name 'decypharr*.spk' -print | sort)
-
-          if [[ "${#packages[@]}" -ne 1 ]]; then
-            echo "::error::Expected exactly one Decypharr SPK, found ${#packages[@]}"
-            printf '%s\n' "${packages[@]}"
-            exit 1
-          fi
-
-          OUTPUT="out/decypharr-${VERSION}-dsm7.3-apollolake.spk"
-          cp "${packages[0]}" "${OUTPUT}"
-          sha256sum "${OUTPUT}" > "${OUTPUT}.sha256"
-
-      - name: Upload apollolake SPK
-        uses: actions/upload-artifact@v7
-        with:
-          name: synology-DSM-7.3-apollolake
-          path: out/*
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload smoke diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: diagnostics-smoke-apollolake
-          path: |
-            .synology-build/spksrc/spk/decypharr/*.log
-            .synology-build/spksrc/spk/decypharr/work-*/INFO
-            .synology-build/spksrc/spk/decypharr/work-*/PLIST
-          if-no-files-found: ignore
-          include-hidden-files: true
-          retention-days: 7
-
   build:
     name: ${{ matrix.platform }} ${{ matrix.version }} / ${{ matrix.arch }}
-    needs: smoke
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -237,7 +145,7 @@ jobs:
   release:
     name: Attach Synology packages to release
     if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release-v')
-    needs: [smoke, build]
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - name: Download all Synology artifacts
