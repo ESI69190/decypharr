@@ -87,5 +87,5 @@ This fork also builds native Synology packages for DSM 7.3 and SRM 1.3.
 The package keeps the Synology-specific FUSE compatibility changes isolated
 from normal Linux, Docker, macOS and Windows builds.
 
-See [the Synology packaging guide](../../../../../synology/README.md) for the
+See [the Synology packaging guide](https://github.com/ESI69190/decypharr/blob/main/synology/README.md) for the
 supported architecture matrix, FUSE helper setup and shared-folder ACL notes.
