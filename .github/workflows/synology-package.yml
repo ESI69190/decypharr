@@ -1,198 +1,56 @@
-name: Synology DSM 7.x and SRM 1.x packages
+name: Publish Synology Decypharr v2.7 avoton
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'synology/**'
-      - '.github/workflows/synology-package.yml'
-      - 'pkg/server/assets/**'
-      - '.github/release-notes/**'
-      - '**/*.go'
-      - 'go.mod'
-      - 'go.sum'
   push:
     branches:
-      - main
-      - 'synology-*'
-      - 'release-v*'
-    tags:
-      - 'v*'
+      - release-v2.7
     paths:
-      - 'synology/**'
       - '.github/workflows/synology-package.yml'
-      - 'pkg/server/assets/**'
-      - '.github/release-notes/**'
-      - '**/*.go'
-      - 'go.mod'
-      - 'go.sum'
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
-  group: synology-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
-
-env:
-  SPKSRC_REF: e353e52f6117f59326550ece07ca0c68903a57fc
-  DECYPHARR_BASE_VERSION: "2.7"
+  group: synology-release-v2.7
+  cancel-in-progress: true
 
 jobs:
-  build:
-    name: ${{ matrix.platform }} ${{ matrix.version }} / ${{ matrix.arch }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 20
-      matrix:
-        include:
-          - platform: DSM
-            version: '7.3'
-            arch: avoton
-            build_target: avoton-7.3
-
-    steps:
-      - name: Checkout Decypharr
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Derive package version
-        id: meta
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          elif [[ "${GITHUB_REF}" == refs/heads/release-v* ]]; then
-            VERSION="${GITHUB_REF_NAME#release-v}"
-          else
-            VERSION="${DECYPHARR_BASE_VERSION}"
-          fi
-          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
-
-      - name: Prepare pinned spksrc tree
-        env:
-          DECYPHARR_GIT_HASH: ${{ steps.meta.outputs.source_sha }}
-          SPKSRC_DIR: ${{ github.workspace }}/.synology-build/spksrc
-        run: bash synology/prepare-spksrc.sh
-
-      - name: Cache spksrc toolchain and Go modules
-        uses: actions/cache@v6
-        with:
-          path: |
-            .synology-build/spksrc/toolchain/*/work
-            .synology-build/spksrc/distrib/go
-          key: synology-${{ matrix.build_target }}-${{ hashFiles('go.sum', 'synology/cross/decypharr/Makefile', 'synology/spk/decypharr/Makefile') }}
-          restore-keys: |
-            synology-${{ matrix.build_target }}-
-
-      - name: Build SPK
-        env:
-          DECYPHARR_GIT_HASH: ${{ steps.meta.outputs.source_sha }}
-          DECYPHARR_VERSION: ${{ steps.meta.outputs.version }}
-        run: |
-          docker run --rm \
-            -e DECYPHARR_GIT_HASH \
-            -e DECYPHARR_VERSION \
-            -v "${PWD}/.synology-build/spksrc:/spksrc" \
-            -w /spksrc \
-            ghcr.io/synocommunity/spksrc:latest \
-            make -C spk/decypharr "arch-${{ matrix.build_target }}" "SPK_PACKAGE_ARCHS=${{ matrix.arch }}"
-
-      - name: Collect package
-        shell: bash
-        env:
-          VERSION: ${{ steps.meta.outputs.version }}
-        run: |
-          mkdir -p out
-          mapfile -t packages < <(find .synology-build/spksrc/packages -maxdepth 1 -type f -name 'decypharr*.spk' -print | sort)
-
-          if [[ "${#packages[@]}" -ne 1 ]]; then
-            echo "::error::Expected exactly one Decypharr SPK, found ${#packages[@]}"
-            printf '%s\n' "${packages[@]}"
-            exit 1
-          fi
-
-          PLATFORM="$(printf '%s' "${{ matrix.platform }}" | tr '[:upper:]' '[:lower:]')"
-          OUTPUT="out/decypharr-${VERSION}-${PLATFORM}${{ matrix.version }}-${{ matrix.arch }}.spk"
-
-          cp "${packages[0]}" "${OUTPUT}"
-          sha256sum "${OUTPUT}" > "${OUTPUT}.sha256"
-
-      - name: Upload SPK
-        uses: actions/upload-artifact@v7
-        with:
-          name: synology-${{ matrix.platform }}-${{ matrix.version }}-${{ matrix.arch }}
-          path: out/*
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: diagnostics-${{ matrix.platform }}-${{ matrix.version }}-${{ matrix.arch }}
-          path: |
-            .synology-build/spksrc/spk/decypharr/*.log
-            .synology-build/spksrc/spk/decypharr/work-*/INFO
-            .synology-build/spksrc/spk/decypharr/work-*/PLIST
-          if-no-files-found: ignore
-          include-hidden-files: true
-          retention-days: 7
-
-  release:
-    name: Attach Synology packages to release
-    if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release-v')
-    needs: [build]
+  publish:
+    name: Publish DSM 7.3 avoton package
     runs-on: ubuntu-latest
     steps:
-      - name: Download all Synology artifacts
-        uses: actions/download-artifact@v8
-        with:
-          pattern: synology-*
-          path: release
-          merge-multiple: true
+      - name: Download validated avoton artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p release
+          gh run download 38960794805 \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name synology-DSM-7.3-avoton \
+            --dir release
+          find release -maxdepth 1 -type f -print
 
       - name: Build checksum manifest
-        shell: bash
         run: |
           cd release
           find . -maxdepth 1 -type f -name '*.spk' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          test -s SHA256SUMS
+          cat SHA256SUMS
 
-      - name: Upload to GitHub Release
+      - name: Create release and upload package
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REF_NAME: ${{ github.ref_name }}
-        shell: bash
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            TAG="${REF_NAME}"
-          else
-            TAG="${REF_NAME#release-}"
-          fi
-
-          for attempt in {1..40}; do
-            if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-              break
-            fi
-            sleep 15
-          done
-
+          TAG="v2.7"
           if ! gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            TARGET_ARGS=()
-            if [[ "${GITHUB_REF}" == refs/heads/release-v* ]]; then
-              TARGET_ARGS=(--target "${GITHUB_SHA}")
-            fi
-
             gh release create "${TAG}" \
               --repo "${GITHUB_REPOSITORY}" \
+              --target "${GITHUB_SHA}" \
               --title "decypharr ${TAG}" \
-              --generate-notes \
-              "${TARGET_ARGS[@]}"
+              --notes "Native Synology DSM 7.3 avoton package for Decypharr v2.7. Includes DSM FUSE compatibility and SynoPlex runtime permission fixes."
           fi
-
           gh release upload "${TAG}" release/*.spk release/SHA256SUMS \
             --repo "${GITHUB_REPOSITORY}" \
             --clobber
