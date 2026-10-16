@@ -1,5 +1,5 @@
 SPK_NAME = decypharr
-SPK_VERS ?= $(if $(DECYPHARR_VERSION),$(DECYPHARR_VERSION),0.0.0)
+SPK_VERS ?= $(if $(DECYPHARR_VERSION),$(DECYPHARR_VERSION),0.0.0-dev)
 SPK_REV ?= 1
 SPK_ICON = src/decypharr.png
 
@@ -8,11 +8,11 @@ DEPENDS += cross/rclone
 DEPENDS += cross/fuse
 DEPENDS += cross/fuse3
 
-MAINTAINER = ESI69190
-MAINTAINER_URL = https://github.com/ESI69190
+MAINTAINER = sirrobot01
+MAINTAINER_URL = https://github.com/sirrobot01
 DESCRIPTION = Decypharr is a media gateway for Debrid services and Usenet, providing qBittorrent and SABnzbd compatible APIs for Sonarr, Radarr and other Arr applications.
 DISPLAY_NAME = Decypharr
-HOMEPAGE = https://github.com/ESI69190/decypharr
+HOMEPAGE = https://github.com/sirrobot01/decypharr
 HELPURL = https://docs.decypharr.com
 LICENSE = MIT
 
@@ -29,15 +29,13 @@ ADMIN_PORT = $(SERVICE_PORT)
 REQUIRED_MIN_DSM = 7.3
 REQUIRED_MIN_SRM = 1.3
 
-# DSM 7.3.1 build 86003 is an explicitly validated runtime target.
-# Keep the package compatibility floor aligned with the oldest tested DSM 7.3.1 build.
+# DSM 7.3.1 build 86003 is the oldest runtime target validated by this package.
 ifeq ($(TCVERSION),7.3)
 OS_MIN_VER = 7.3-86003
 endif
+
 UNSUPPORTED_ARCHS = $(PPC_ARCHS) $(ARMv5_ARCHS)
-
 USE_ALTERNATE_TMPDIR = 1
-
 POST_STRIP_TARGET = decypharr_extra_install
 
 include ../../mk/spksrc.common.mk

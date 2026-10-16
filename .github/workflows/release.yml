@@ -2,8 +2,6 @@ name: Release
 
 on:
   push:
-    branches:
-      - 'release-v*'
     tags:
       - 'v*'
 
@@ -11,12 +9,8 @@ permissions:
   contents: write
   packages: write
 
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
-
 env:
-  REGISTRY_GHCR: ghcr.io/esi69190/decypharr
+  REGISTRY_GHCR: ghcr.io/sirrobot01/decypharr
   REGISTRY_HUB: docker.io/cy01/blackhole
   LDFLAGS_PKG: github.com/sirrobot01/decypharr/pkg/version
 
@@ -25,26 +19,15 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
       channel: ${{ steps.meta.outputs.channel }}
     steps:
       - name: Extract version and channel
         id: meta
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            TAG="${GITHUB_REF_NAME}"
-          elif [[ "${GITHUB_REF}" == refs/heads/release-v* ]]; then
-            TAG="${GITHUB_REF_NAME#release-}"
-          else
-            echo "Unsupported release ref: ${GITHUB_REF}" >&2
-            exit 1
-          fi
-
+          TAG="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG#v}"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-
           if [[ "$TAG" == *"-beta"* ]]; then
             echo "channel=beta" >> "$GITHUB_OUTPUT"
           elif [[ "$TAG" == *"-rc"* ]]; then
@@ -196,9 +179,6 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     needs: prepare
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v5
 
@@ -216,14 +196,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to Docker Hub
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
         uses: docker/login-action@v3
         with:
           registry: docker.io
-          username: ${{ env.DOCKERHUB_USERNAME }}
-          password: ${{ env.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push to GHCR
+      - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -233,23 +212,9 @@ jobs:
             VERSION=${{ needs.prepare.outputs.version }}
             CHANNEL=${{ needs.prepare.outputs.channel }}
           tags: |
-            ${{ env.REGISTRY_GHCR }}:${{ needs.prepare.outputs.tag }}
+            ${{ env.REGISTRY_GHCR }}:${{ github.ref_name }}
             ${{ env.REGISTRY_GHCR }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push to Docker Hub
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          build-args: |
-            VERSION=${{ needs.prepare.outputs.version }}
-            CHANNEL=${{ needs.prepare.outputs.channel }}
-          tags: |
-            ${{ env.REGISTRY_HUB }}:${{ needs.prepare.outputs.tag }}
+            ${{ env.REGISTRY_HUB }}:${{ github.ref_name }}
             ${{ env.REGISTRY_HUB }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -272,7 +237,7 @@ jobs:
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.prepare.outputs.tag }}
+          TAG: ${{ github.ref_name }}
           CHANNEL: ${{ needs.prepare.outputs.channel }}
         run: |
           PRERELEASE=""
@@ -280,30 +245,8 @@ jobs:
             PRERELEASE="--prerelease"
           fi
 
-          PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
-          RELEASE_NOTES=".github/release-notes/${TAG}.md"
-
-          if gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* \
-              --repo "${GITHUB_REPOSITORY}" \
-              --clobber
-          else
-            TARGET_ARGS=()
-            if [[ "${GITHUB_REF}" == refs/heads/release-v* ]]; then
-              TARGET_ARGS=(--target "${GITHUB_SHA}")
-            fi
-
-            NOTES_ARGS=(--generate-notes)
-            if [[ -f "${RELEASE_NOTES}" ]]; then
-              NOTES_ARGS=(--notes-file "${RELEASE_NOTES}")
-            elif [[ -n "${PREVIOUS_TAG}" ]]; then
-              NOTES_ARGS=(--generate-notes --notes-start-tag "${PREVIOUS_TAG}")
-            fi
-
-            gh release create "$TAG" dist/* \
-              --repo "${GITHUB_REPOSITORY}" \
-              --title "decypharr ${TAG}" \
-              "${TARGET_ARGS[@]}" \
-              "${NOTES_ARGS[@]}" \
-              $PRERELEASE
-          fi
+          gh release create "$TAG" dist/* \
+            --title "decypharr ${TAG}" \
+            --generate-notes \
+            $PRERELEASE \
+            --notes-start-tag "$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")"
