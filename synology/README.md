@@ -81,6 +81,8 @@ Consumers such as Sonarr, Radarr, Bazarr and Plex also need traversal access to 
 
 ## Supported CI targets
 
+The native package matrix is revalidated against the current upstream code whenever Synology packaging or Go sources change.
+
 The workflow builds DSM 7.3 packages for x86_64, ARM64 and selected ARM32 Synology platforms, plus SRM 1.3 targets. It first runs an apollolake smoke build, then expands to the full matrix.
 
 ARM32 builds use a Synology-cross-compiled rapidyenc static library. The current `mnightingale/rapidyenc` wrapper references the same upstream rapidyenc commit used by the cross package.
