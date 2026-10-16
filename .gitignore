@@ -29,3 +29,4 @@ node_modules/
 *.prof
 .codex/
 .claude/
+.synology-build/
