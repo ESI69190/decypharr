@@ -41,6 +41,7 @@ Transport endpoint is not connected
 To avoid changing Decypharr's normal Linux/Docker dependency, the Synology build patches only its private source copy to:
 
 - use `github.com/hanwen/go-fuse/v2 v2.5.1`;
+- omit the optional `NotifyPrune` cache-pruning call unavailable in go-fuse 2.5.1 while retaining `NotifyEntry` / `NotifyContent` invalidation;
 - use `MaxWrite = 128 KiB`;
 - use `MaxBackground = 12`;
 - use `MaxReadAhead = 128 KiB`;
