@@ -99,3 +99,5 @@ make -C .synology-build/spksrc/spk/decypharr \
 ```
 
 Generated packages are written below `.synology-build/spksrc/packages/`.
+
+<!-- Actions validation probe: Decypharr v2.7 Synology packaging -->
