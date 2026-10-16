@@ -21,6 +21,15 @@ github.com/hanwen/go-fuse/v2 v2.5.1 h1:OQBE8zVemSocRxA4OaFJbjJ5hlpCmIWbGr7r0M4uo
 github.com/hanwen/go-fuse/v2 v2.5.1/go.mod h1:xKwi1cF7nXAOBCXujD5ie0ZKsxc8GGSA1rlMJc+8IJs=
 EOF
 
+# go-fuse v2.5.1 also predates Inode.NotifyPrune. Decypharr v2.7 uses it
+# only as an additional subtree cache cleanup after NotifyEntry/NotifyContent.
+# Older Synology kernels keep the supported invalidation path and simply omit
+# this optional NOTIFY_PRUNE optimization in the private SPK source copy.
+DIR_BACKEND="${GO_SRC_DIR}/pkg/mount/dfs/backend/hanwen/dir.go"
+if [ -f "${DIR_BACKEND}" ] && grep -q 'NotifyPrune' "${DIR_BACKEND}"; then
+    sed -i '/_ = d\.NotifyPrune(\[\]\*fs\.Inode{child})/d' "${DIR_BACKEND}"
+fi
+
 # go-fuse v2.5.1 predates MountOptions.PanicHandler. beta currently uses it,
 # so remove only that option from the packaging copy.
 if grep -q 'PanicHandler:' "${BACKEND}"; then
@@ -45,3 +54,8 @@ grep -q 'MaxReadAhead:[[:space:]]*128 \* 1024' "${BACKEND}" || {
     echo "Synology FUSE patch: MaxReadAhead anchor not found" >&2
     exit 1
 }
+
+if [ -f "${DIR_BACKEND}" ] && grep -q 'NotifyPrune' "${DIR_BACKEND}"; then
+    echo "Synology FUSE patch: NotifyPrune is not supported by go-fuse v2.5.1" >&2
+    exit 1
+fi
