@@ -282,8 +282,7 @@ func getAppPreferences() *AppPreferences {
 		MaxConnec:                          500,
 		MaxConnecPerTorrent:                100,
 		// Advertise completed Decypharr items as removable to Arr applications.
-		// Radarr/Sonarr then set CanMoveFiles=true for pausedUP items that reached
-		// their ratio limit, allowing native ImportMode.Move instead of Copy.
+		// Radarr/Sonarr can then use native ImportMode.Move instead of Copy.
 		MaxRatio:                           1,
 		MaxRatioAct:                        1,
 		MaxRatioEnabled:                    true,

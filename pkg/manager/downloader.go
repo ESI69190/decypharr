@@ -2,9 +2,11 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -24,11 +26,8 @@ import (
 )
 
 type Downloader struct {
-	manager   *Manager
-	strmURL   string
-	mountPath string
-	dest      string
-	logger    zerolog.Logger
+	manager *Manager
+	logger  zerolog.Logger
 }
 
 const (
@@ -40,6 +39,8 @@ const (
 	symlinkReadyMaxInterval     = 2 * time.Second
 	symlinkLogEveryAttempts     = 10
 	symlinkLogSampleSize        = 8
+	localDownloadMaxAttempts    = 4
+	defaultFileDownloadWorkers  = 5
 )
 
 type downloadLogMeta struct {
@@ -54,28 +55,18 @@ type downloadLogMeta struct {
 	parts           int
 }
 
-// NewDownloadManager creates a new strm manager
+// NewDownloadManager creates a new download manager
 func NewDownloadManager(manager *Manager) *Downloader {
-	cfg := config.Get()
-	strmURL := cfg.AppURL
-	if strmURL == "" {
-		bindAddress := cfg.BindAddress
-		if bindAddress == "" {
-			bindAddress = "localhost"
-		}
-
-		strmURL = fmt.Sprintf("http://%s:%s", bindAddress, cfg.Port)
-	}
 	return &Downloader{
-		manager:   manager,
-		strmURL:   strmURL,
-		mountPath: cfg.Mount.MountPath,
-		logger:    manager.logger.With().Str("component", "downloader").Logger(),
-		dest:      cfg.DownloadFolder,
+		manager: manager,
+		logger:  manager.logger.With().Str("component", "downloader").Logger(),
 	}
 }
 
 func (d *Downloader) download(torrent *storage.Entry) error {
+	if err := d.operationContext().Err(); err != nil {
+		return err
+	}
 	// Mark as in-flight up front so the queue scheduler skips this entry while
 	// we're iterating seasons / creating symlinks (processSymlink only flips
 	// this flag after its own directory scan, which is too late for the parent
@@ -94,11 +85,17 @@ func (d *Downloader) download(torrent *storage.Entry) error {
 	if isMultiSeason {
 		seasonResults := convertToMultiSeason(torrent, seasons)
 		for _, result := range seasonResults {
+			if saved, err := d.manager.queue.GetTorrent(result.InfoHash); err == nil && saved.IsComplete {
+				continue
+			}
 			if err := d.manager.queue.Add(result); err != nil {
 				d.logger.Error().Err(err).Msgf("Failed to save season torrent")
 				continue
 			}
 			if err := d.process(result, torrentMountPath); err != nil {
+				if errors.Is(err, context.Canceled) && d.operationContext().Err() != nil {
+					return err
+				}
 				d.markAsError(result, err)
 			}
 		}
@@ -116,12 +113,10 @@ func (d *Downloader) process(entry *storage.Entry, mountPath string) error {
 		return d.processDownload(entry)
 	case config.DownloadActionSymlink:
 		return d.processSymlink(entry, mountPath)
-	case config.DownloadActionStrm:
-		return d.processStrm(entry)
 	case config.DownloadActionNone:
 		d.completeEntry(entry)
 		// Remove entry from queue
-		_ = d.manager.queue.Delete(entry.InfoHash, nil)
+		_ = d.manager.queue.Delete(entry.InfoHash, true, nil)
 		return nil
 	default:
 		return d.processSymlink(entry, mountPath)
@@ -130,8 +125,10 @@ func (d *Downloader) process(entry *storage.Entry, mountPath string) error {
 
 func (d *Downloader) completeEntry(entry *storage.Entry) {
 	d.markAsCompleted(entry)
+	d.manager.strm.SyncEntryAsync(entry)
 	d.notifyCompleted(entry)
 	d.triggerArrRefresh(entry)
+	d.manager.ReindexArrEntry(entry.Category, entry.InfoHash)
 }
 
 func (d *Downloader) markAsCompleted(entry *storage.Entry) {
@@ -153,14 +150,14 @@ func (d *Downloader) notifyCompleted(entry *storage.Entry) {
 
 func (d *Downloader) triggerArrRefresh(entry *storage.Entry) {
 	go func() {
-		a := d.manager.arr.GetOrCreate(entry.Category)
-		if a == nil || a.Host == "" || a.Token == "" {
+		instance := d.manager.arr.GetOrCreate(entry.Category)
+		if !instance.Reachable() {
 			return
 		}
-		if err := a.Refresh(); err != nil {
+		if err := d.manager.arr.RefreshMonitoredDownloads(context.Background(), instance.Name); err != nil {
 			d.logger.Debug().
 				Err(err).
-				Str("arr", a.Name).
+				Str("arr", instance.Name).
 				Str("entry", entry.Name).
 				Msg("Failed to trigger Arr refresh")
 		}
@@ -220,7 +217,7 @@ func (d *Downloader) processSymlink(entry *storage.Entry, mountPath string) erro
 	// Usenet parsing/probing deliberately avoids the streaming read-ahead
 	// setting. A large playback window can turn a small import probe into a
 	// substantial background download and hold an active slot unnecessarily.
-	if !entry.IsNZB() && !d.manager.config.SkipPreCache && len(filePaths) > 0 {
+	if !entry.IsNZB() && !config.Get().SkipPreCache && len(filePaths) > 0 {
 		probeFiles := filePaths
 		if len(probeFiles) > MaxNZBPreCacheFiles {
 			probeFiles = probeFiles[:MaxNZBPreCacheFiles]
@@ -537,7 +534,11 @@ func (d *Downloader) processTorrentDownload(entry *storage.Entry) error {
 		return fmt.Errorf("no valid download links available for %s", entry.Name)
 	}
 
-	p := pool.New().WithErrors().WithFirstError()
+	maxWorkers := defaultFileDownloadWorkers
+	if d.manager.config != nil && d.manager.config.MaxActiveDownloads > 0 {
+		maxWorkers = d.manager.config.MaxActiveDownloads
+	}
+	p := pool.New().WithErrors().WithFirstError().WithMaxGoroutines(maxWorkers)
 	for _, task := range tasks {
 		p.Go(func() error {
 			if err := d.localDownloader(
@@ -662,48 +663,11 @@ func (d *Downloader) processUsenetDownload(entry *storage.Entry) error {
 	err := p.Wait()
 
 	if err != nil {
-		entry.MarkAsError(err)
-		_ = d.manager.queue.Update(entry)
 		return fmt.Errorf("NZB download failed: %w", err)
 	}
 
 	d.completeEntry(entry)
 	d.logger.Info().Msgf("Downloaded all NZB files for %s", entry.Name)
-	return nil
-}
-
-// processStrm creates symlinks for torrent files
-func (d *Downloader) processStrm(torrent *storage.Entry) error {
-	files := torrent.GetActiveFiles()
-	d.logger.Info().Msgf("Creating .strm for %d files ...", len(files))
-
-	torrentSymlinkPath := torrent.DownloadPath()
-
-	// Create symlink directory
-	err := os.MkdirAll(torrentSymlinkPath, os.ModePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create directory: %s: %v", torrentSymlinkPath, err)
-	}
-
-	for _, file := range files {
-		strmFilePath := filepath.Join(torrentSymlinkPath, file.Name+".strm")
-		streamURL, err := url.JoinPath(
-			d.strmURL,
-			"webdav",
-			"stream",
-			EntryAllFolder,
-			url.PathEscape(torrent.GetFolder()),
-			url.PathEscape(file.Name),
-		)
-		if err != nil {
-			continue
-		}
-		if err := os.WriteFile(strmFilePath, []byte(streamURL), 0644); err != nil {
-			return fmt.Errorf("failed to create .strm file: %s: %v", strmFilePath, err)
-		}
-	}
-	d.completeEntry(torrent)
-	d.logger.Info().Str("destination", torrentSymlinkPath).Msgf("Created .strm files for %s", torrent.Name)
 	return nil
 }
 
@@ -720,8 +684,6 @@ func (d *Downloader) detectMultiSeason(torrent *storage.Entry) (bool, []SeasonIn
 	if !isMultiSeason {
 		return false, nil
 	}
-
-	d.logger.Info().Msgf("Multi-season torrent detected with seasons: %v", getSortedSeasons(seasonsFound))
 
 	// Group files by season
 	seasonGroups := groupFilesBySeason(files, seasonsFound)
@@ -744,18 +706,66 @@ func (d *Downloader) detectMultiSeason(torrent *storage.Entry) (bool, []SeasonIn
 		})
 	}
 
+	// Only convert to multi-season if multiple season entries were actually created
+	if len(seasons) <= 1 {
+		return false, nil
+	}
+
+	d.logger.Info().Msgf("Multi-season torrent detected with seasons: %v", getSortedSeasons(seasonsFound))
+
 	return true, seasons
 }
 
-// localDownloader downloads a file with grab so interrupted local downloads can resume cleanly.
+// localDownloader downloads a file with grab and retries transient failures.
+// Each attempt observes the same destination, allowing grab to resume from the
+// partial file instead of restarting a large transfer after a CDN interruption.
 func (d *Downloader) localDownloader(downloadURL, filename string, byterange *[2]int64, progressCallback func(int64, int64)) error {
+	ctx := d.operationContext()
+	delay := config.DefaultRetryDelay
+	reported := int64(0)
+	var lastErr error
+
+	for attempt := 1; attempt <= localDownloadMaxAttempts; attempt++ {
+		err := d.localDownloadAttempt(downloadURL, filename, byterange, func(completed, speed int64) {
+			if progressCallback != nil && completed != reported {
+				progressCallback(completed-reported, speed)
+			}
+			reported = completed
+		})
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if attempt == localDownloadMaxAttempts || !isRetryableDownloadError(err) {
+			break
+		}
+
+		d.logger.Warn().
+			Err(err).
+			Str("file", filepath.Base(filename)).
+			Int("attempt", attempt).
+			Msg("Local download interrupted, retrying from partial file")
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+		if delay *= 2; delay > config.DefaultRetryDelayMax {
+			delay = config.DefaultRetryDelayMax
+		}
+	}
+
+	return fmt.Errorf("local download failed after retries: %w", lastErr)
+}
+
+func (d *Downloader) localDownloadAttempt(downloadURL, filename string, byterange *[2]int64, progressCallback func(int64, int64)) error {
 	startTime := time.Now()
 	requestedRange := "full"
 	req, err := grab.NewRequest(filename, downloadURL)
 	if err != nil {
 		return err
 	}
-	req = req.WithContext(d.manager.ctx)
+	req = req.WithContext(d.operationContext())
 	req.BufferSize = 1 << 20
 	req.HTTPRequest.Header.Set("User-Agent", "Decypharr[QBitTorrent]")
 	req.HTTPRequest.Header.Set("Accept", "*/*")
@@ -792,25 +802,52 @@ func (d *Downloader) localDownloader(downloadURL, filename string, byterange *[2
 			current := resp.BytesComplete()
 			speed := int64(resp.BytesPerSecond())
 			if current != lastReported && progressCallback != nil {
-				progressCallback(current-lastReported, speed)
+				progressCallback(current, speed)
 				lastReported = current
 			}
 		case <-resp.Done:
 			if progressCallback != nil {
 				final := resp.BytesComplete()
 				if final != lastReported {
-					progressCallback(final-lastReported, int64(resp.BytesPerSecond()))
+					progressCallback(final, int64(resp.BytesPerSecond()))
 				}
 			}
 			if err := resp.Err(); err != nil {
-				if grab.IsStatusCodeError(err) && resp.HTTPResponse != nil {
-					return fmt.Errorf("unexpected status %d for %s", resp.HTTPResponse.StatusCode, downloadURL)
-				}
 				return err
 			}
 			return nil
 		}
 	}
+}
+
+func isRetryableDownloadError(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if status, ok := errors.AsType[grab.StatusCodeError](err); ok {
+		switch int(status) {
+		case http.StatusRequestTimeout,
+			http.StatusTooEarly,
+			http.StatusTooManyRequests,
+			http.StatusInternalServerError,
+			http.StatusBadGateway,
+			http.StatusServiceUnavailable,
+			http.StatusGatewayTimeout:
+			return true
+		default:
+			return false
+		}
+	}
+	if errors.Is(err, grab.ErrBadLength) ||
+		errors.Is(err, grab.ErrBadChecksum) ||
+		errors.Is(err, grab.ErrNoFilename) ||
+		errors.Is(err, grab.ErrFileExists) {
+		return false
+	}
+	if _, ok := errors.AsType[net.Error](err); ok {
+		return true
+	}
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
 }
 
 func (d *Downloader) buildDownloadLogMeta(req *http.Request, resp *http.Response, requestedRange, transferMode string, parts int) downloadLogMeta {

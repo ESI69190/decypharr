@@ -1,8 +1,7 @@
 # Decypharr service setup for Synology DSM/SRM.
 #
 # Keep immutable application files below SYNOPKG_PKGDEST and persistent data
-# below SYNOPKG_PKGVAR, following the same layout used by SynoCommunity
-# packages such as Bazarr, Sonarr and Radarr.
+# below SYNOPKG_PKGVAR.
 
 PATH="${SYNOPKG_PKGDEST}/bin:${PATH}"
 DECYPHARR="${SYNOPKG_PKGDEST}/bin/decypharr"
@@ -12,7 +11,7 @@ CONFIG_DIR="${SYNOPKG_PKGVAR}/data"
 CACHE_DIR="${SYNOPKG_PKGVAR}/cache"
 LOG_DIR="${SYNOPKG_PKGVAR}/logs"
 
-SERVICE_COMMAND="env PATH=${PATH} HOME=${HOME_DIR} XDG_CACHE_HOME=${CACHE_DIR} LOG_PATH=${LOG_DIR} LD_LIBRARY_PATH=${SYNOPKG_PKGDEST}/lib DECYPHARR_SYNOLOGY_FUSE_COMPAT=1 UMASK=022 ${DECYPHARR} --config ${CONFIG_DIR}"
+SERVICE_COMMAND="env PATH=${PATH} HOME=${HOME_DIR} XDG_CACHE_HOME=${CACHE_DIR} LOG_PATH=${LOG_DIR} LD_LIBRARY_PATH=${SYNOPKG_PKGDEST}/lib UMASK=022 ${DECYPHARR} --config ${CONFIG_DIR}"
 
 SVC_BACKGROUND=y
 SVC_WRITE_PID=y
@@ -23,11 +22,25 @@ create_decypharr_directories()
     mkdir -p "${CONFIG_DIR}" "${CACHE_DIR}" "${LOG_DIR}"
 }
 
+configure_runtime_permissions()
+{
+    # External automation may rewrite config.json as root. Repair ownership
+    # before every start so the unprivileged Decypharr service can still read
+    # its persistent state.
+    chown sc-decypharr:synocommunity "${CONFIG_DIR}" "${CACHE_DIR}" "${LOG_DIR}" 2>/dev/null || true
+    for state_file in config.json auth.json torrents.json; do
+        state_path="${CONFIG_DIR}/${state_file}"
+        if [ -f "${state_path}" ]; then
+            chown sc-decypharr:synocommunity "${state_path}" 2>/dev/null || true
+            chmod 0600 "${state_path}" 2>/dev/null || true
+        fi
+    done
+}
+
 configure_decypharr_fuse()
 {
-    # DSM installs package files without preserving the privileged mode required
-    # by libfuse helpers. Restore it every time the package is installed,
-    # upgraded or started so Decypharr never falls back to "running without mount".
+    # DSM upgrades can drop the setuid bit on the package-local FUSE helpers.
+    # Reassert the minimal permissions required by the unprivileged service.
     fuse_conf="${SYNOPKG_PKGDEST}/etc/fuse.conf"
 
     if [ -d "${SYNOPKG_PKGDEST}/etc" ]; then
@@ -53,19 +66,19 @@ configure_decypharr_fuse()
 service_postinst()
 {
     create_decypharr_directories
+    configure_runtime_permissions
     configure_decypharr_fuse
 }
 
 service_postupgrade()
 {
-    # SYNOPKG_PKGVAR survives package upgrades. Re-create only directories
-    # introduced by newer package revisions.
     create_decypharr_directories
+    configure_runtime_permissions
     configure_decypharr_fuse
 }
 
 service_prestart()
 {
-    # Reassert FUSE runtime permissions before every service start/restart.
+    configure_runtime_permissions
     configure_decypharr_fuse
 }

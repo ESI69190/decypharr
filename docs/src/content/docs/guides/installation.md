@@ -60,7 +60,7 @@ docker run -d \
 
 ## Binary
 
-Download the latest release from [ESI69190 Decypharr Releases](https://github.com/ESI69190/decypharr/releases).
+Download the latest release from [GitHub Releases](https://github.com/sirrobot01/decypharr/releases).
 
 ```bash
 # Extract
@@ -81,15 +81,11 @@ preconfigured alongside Sonarr/Radarr and connected to your debrid provider. Inc
 After installation, access the web UI. You'll be redirected to the [Setup Wizard](./quick-start/) for first-run
 configuration.
 
-
 ## Synology DSM / SRM
 
-Native Synology packages are published with each ESI69190 release for the supported DSM 7.3 and SRM 1.3 architectures. Version **2.5.1** includes the DSM FUSE compatibility fix for older Synology kernels and improved post-install diagnostics.
+This fork also builds native Synology packages for DSM 7.3 and SRM 1.3.
+The package keeps the Synology-specific FUSE compatibility changes isolated
+from normal Linux, Docker, macOS and Windows builds.
 
-After installing or upgrading the SPK, run:
-
-```bash
-/var/packages/decypharr/target/bin/decypharr-fuse-fix
-```
-
-See `synology/README.md` in the repository for FUSE and Synology ACL requirements.
+See [the Synology packaging guide](https://github.com/ESI69190/decypharr/blob/main/synology/README.md) for the
+supported architecture matrix, FUSE helper setup and shared-folder ACL notes.

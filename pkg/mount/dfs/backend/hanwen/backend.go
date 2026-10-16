@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/rs/zerolog"
 	"github.com/sirrobot01/decypharr/internal/logger"
-	"github.com/sirrobot01/decypharr/internal/utils"
 	"github.com/sirrobot01/decypharr/pkg/mount/dfs/backend"
 	"github.com/sirrobot01/decypharr/pkg/mount/dfs/config"
 	"github.com/sirrobot01/decypharr/pkg/mount/dfs/vfs"
@@ -46,7 +46,7 @@ type Backend struct {
 
 // NewBackend creates a new hanwen backend
 func NewBackend(vfs *vfs.Manager, config *config.FuseConfig) (backend.Backend, error) {
-	now := utils.Now()
+	now := time.Now()
 	log := logger.New("hanwen-backend")
 	// One shared rate-limited logger for the whole mount. Files/Dirs reference
 	// it instead of allocating their own xsync map per inode — dedup keys are
@@ -76,29 +76,24 @@ func (b *Backend) Mount(ctx context.Context) error {
 	// Try to unmount if already mounted
 	b.forceUnmount(ctx)
 
-	maxWrite := 1024 * 1024
-	maxBackground := b.config.FuseMaxBackground
-	maxReadAhead := b.config.FuseMaxReadAhead
-
-	// DSM 7 on older Synology kernels can reject aggressive FUSE_INIT values
-	// with EINVAL. Keep the generic Linux defaults unchanged, but use a
-	// conservative handshake for the native Synology package.
-	if os.Getenv("DECYPHARR_SYNOLOGY_FUSE_COMPAT") == "1" {
-		maxWrite = 128 * 1024
-		maxBackground = 12
-		maxReadAhead = 128 * 1024
-	}
-
 	mountOpt := fuse.MountOptions{
 		FsName:               "decypharr",
 		Debug:                false,
 		Name:                 "decypharr",
 		DisableXAttrs:        true,
 		IgnoreSecurityLabels: true,
-		MaxWrite:             maxWrite,
-		MaxBackground:        maxBackground,
-		MaxReadAhead:         maxReadAhead,
-		AllowOther:           true,
+		MaxWrite:             1024 * 1024,
+		// The kernel defaults MaxBackground to 12, which caps in-flight
+		// readahead far below the VFS readahead window.
+		MaxBackground: b.config.FuseMaxBackground,
+		MaxReadAhead:  b.config.FuseMaxReadAhead,
+		AllowOther:    true,
+		// Route handler panics through our logger; go-fuse fails the single
+		// request with EIO instead of the panic unwinding into its serve loop.
+		PanicHandler: func(p any) fuse.Status {
+			b.logger.Error().Any("panic", p).Bytes("stack", debug.Stack()).Msg("FUSE handler panic")
+			return fuse.EIO
+		},
 	}
 
 	var opt []string
