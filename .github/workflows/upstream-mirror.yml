@@ -1,0 +1,54 @@
+name: Mirror upstream main
+
+on:
+  schedule:
+    - cron: '17 */2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: upstream-main-mirror
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    name: Mirror sirrobot01/main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout downstream main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Mirror upstream main branch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream https://github.com/sirrobot01/decypharr.git 2>/dev/null || \
+            git remote set-url upstream https://github.com/sirrobot01/decypharr.git
+
+          git fetch --prune upstream main
+
+          UPSTREAM_SHA="$(git rev-parse upstream/main)"
+          CURRENT_SHA="$(git ls-remote --heads origin refs/heads/upstream-main | awk '{print $1}')"
+
+          {
+            echo "## Upstream mirror"
+            echo
+            echo "- upstream: `${UPSTREAM_SHA}`"
+            echo "- previous mirror: `${CURRENT_SHA:-none}`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [[ "${CURRENT_SHA:-}" == "${UPSTREAM_SHA}" ]]; then
+            echo "Mirror already current."
+            exit 0
+          fi
+
+          git push --force origin "${UPSTREAM_SHA}:refs/heads/upstream-main"
+          echo "- result: updated `upstream-main`" >> "${GITHUB_STEP_SUMMARY}"
