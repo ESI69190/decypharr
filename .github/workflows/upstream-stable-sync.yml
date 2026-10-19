@@ -1,0 +1,46 @@
+name: Sync upstream stable release
+
+on:
+  schedule:
+    - cron: '47 */2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-stable-release
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Validate and promote latest stable upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout downstream main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sync, build and promote
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM_REPO: sirrobot01/decypharr
+        run: bash synology/sync-upstream-release.sh
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: upstream-stable-sync-diagnostics
+          path: |
+            .synology-build/spksrc/spk/decypharr/*.log
+            .synology-build/spksrc/spk/decypharr/work-*/INFO
+            .synology-build/spksrc/spk/decypharr/work-*/PLIST
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 14

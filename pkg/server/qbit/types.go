@@ -281,11 +281,9 @@ func getAppPreferences() *AppPreferences {
 		MaxActiveUploads:                   3,
 		MaxConnec:                          500,
 		MaxConnecPerTorrent:                100,
-		// Advertise completed Decypharr items as removable to Arr applications.
-		// Radarr/Sonarr can then use native ImportMode.Move instead of Copy.
-		MaxRatio:                           1,
-		MaxRatioAct:                        1,
-		MaxRatioEnabled:                    true,
+		MaxRatio:                           -1,
+		MaxRatioAct:                        0,
+		MaxRatioEnabled:                    false,
 		MaxSeedingTime:                     -1,
 		MaxSeedingTimeEnabled:              false,
 		MaxUploads:                         -1,

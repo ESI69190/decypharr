@@ -14,8 +14,7 @@ on:
   push:
     branches:
       - main
-      - 'synology-*'
-      - 'release-v*'
+      - feat
     tags:
       - 'v*'
     paths:
@@ -40,13 +39,20 @@ env:
 
 jobs:
   smoke:
-    name: Smoke / DSM 7.3 apollolake
+    name: Smoke / DSM 7.3 avoton
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Decypharr
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Validate Synology maintenance scripts
+        run: |
+          bash -n synology/prepare-spksrc.sh
+          bash -n synology/sync-upstream-release.sh
+          sh -n synology/cross/decypharr/src/patch-synology-fuse.sh
+          sh -n synology/cross/decypharr/src/patch-synology-runtime.sh
 
       - name: Derive package version
         id: meta
@@ -57,10 +63,11 @@ jobs:
           elif [[ "${GITHUB_REF}" == refs/heads/release-v* ]]; then
             VERSION="${GITHUB_REF_NAME#release-v}"
           else
-            VERSION="${DECYPHARR_BASE_VERSION}"
+            VERSION="$(cat synology/UPSTREAM_VERSION 2>/dev/null || printf '%s' "${DECYPHARR_BASE_VERSION}")"
           fi
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          SOURCE_SHA="$(cat synology/UPSTREAM_SHA 2>/dev/null || printf '%s' "${GITHUB_SHA}")"
+          echo "source_sha=${SOURCE_SHA}" >> "${GITHUB_OUTPUT}"
 
       - name: Prepare pinned spksrc tree
         env:
@@ -68,17 +75,17 @@ jobs:
           SPKSRC_DIR: ${{ github.workspace }}/.synology-build/spksrc
         run: bash synology/prepare-spksrc.sh
 
-      - name: Cache apollolake toolchain and Go modules
+      - name: Cache avoton toolchain and Go modules
         uses: actions/cache@v6
         with:
           path: |
             .synology-build/spksrc/toolchain/*/work
             .synology-build/spksrc/distrib/go
-          key: synology-apollolake-7.3-${{ hashFiles('go.sum', 'synology/cross/decypharr/Makefile', 'synology/spk/decypharr/Makefile') }}
+          key: synology-avoton-7.3-${{ hashFiles('go.sum', 'synology/cross/decypharr/Makefile', 'synology/spk/decypharr/Makefile') }}
           restore-keys: |
-            synology-apollolake-7.3-
+            synology-avoton-7.3-
 
-      - name: Build apollolake SPK
+      - name: Build avoton SPK
         env:
           DECYPHARR_GIT_HASH: ${{ steps.meta.outputs.source_sha }}
           DECYPHARR_VERSION: ${{ steps.meta.outputs.version }}
@@ -89,9 +96,9 @@ jobs:
             -v "${PWD}/.synology-build/spksrc:/spksrc" \
             -w /spksrc \
             ghcr.io/synocommunity/spksrc:latest \
-            make -C spk/decypharr arch-apollolake-7.3 SPK_PACKAGE_ARCHS=apollolake
+            make -C spk/decypharr arch-avoton-7.3 SPK_PACKAGE_ARCHS=avoton
 
-      - name: Collect apollolake package
+      - name: Collect avoton package
         shell: bash
         env:
           VERSION: ${{ steps.meta.outputs.version }}
@@ -105,14 +112,14 @@ jobs:
             exit 1
           fi
 
-          OUTPUT="out/decypharr-${VERSION}-dsm7.3-apollolake.spk"
+          OUTPUT="out/decypharr-${VERSION}-dsm7.3-avoton.spk"
           cp "${packages[0]}" "${OUTPUT}"
           sha256sum "${OUTPUT}" > "${OUTPUT}.sha256"
 
-      - name: Upload apollolake SPK
+      - name: Upload avoton SPK
         uses: actions/upload-artifact@v7
         with:
-          name: synology-DSM-7.3-apollolake
+          name: synology-DSM-7.3-avoton
           path: out/*
           if-no-files-found: error
           retention-days: 30
@@ -121,7 +128,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: diagnostics-smoke-apollolake
+          name: diagnostics-smoke-avoton
           path: |
             .synology-build/spksrc/spk/decypharr/*.log
             .synology-build/spksrc/spk/decypharr/work-*/INFO
@@ -132,6 +139,7 @@ jobs:
 
   build:
     name: ${{ matrix.platform }} ${{ matrix.version }} / ${{ matrix.arch }}
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     needs: smoke
     runs-on: ubuntu-latest
     strategy:
@@ -275,10 +283,11 @@ jobs:
           elif [[ "${GITHUB_REF}" == refs/heads/release-v* ]]; then
             VERSION="${GITHUB_REF_NAME#release-v}"
           else
-            VERSION="${DECYPHARR_BASE_VERSION}"
+            VERSION="$(cat synology/UPSTREAM_VERSION 2>/dev/null || printf '%s' "${DECYPHARR_BASE_VERSION}")"
           fi
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          SOURCE_SHA="$(cat synology/UPSTREAM_SHA 2>/dev/null || printf '%s' "${GITHUB_SHA}")"
+          echo "source_sha=${SOURCE_SHA}" >> "${GITHUB_OUTPUT}"
 
       - name: Prepare pinned spksrc tree
         env:

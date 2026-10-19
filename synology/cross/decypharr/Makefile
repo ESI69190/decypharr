@@ -46,6 +46,8 @@ PRE_COMPILE_TARGET = decypharr_pre_compile
 decypharr_pre_compile:
 	@$(MSG) Apply Synology-specific FUSE compatibility profile
 	@sh $(CURDIR)/src/patch-synology-fuse.sh "$(GO_SRC_DIR)"
+	@$(MSG) Apply Synology-specific runtime compatibility patches
+	@sh $(CURDIR)/src/patch-synology-runtime.sh "$(GO_SRC_DIR)"
 	@mkdir -p $(GO_SRC_DIR)/internal/jsonx
 	@cp $(CURDIR)/src/jsonx_64.go $(GO_SRC_DIR)/internal/jsonx/jsonx_64.go
 	@cp $(CURDIR)/src/jsonx_32.go $(GO_SRC_DIR)/internal/jsonx/jsonx_32.go

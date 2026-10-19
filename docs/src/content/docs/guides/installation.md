@@ -80,12 +80,3 @@ preconfigured alongside Sonarr/Radarr and connected to your debrid provider. Inc
 
 After installation, access the web UI. You'll be redirected to the [Setup Wizard](./quick-start/) for first-run
 configuration.
-
-## Synology DSM / SRM
-
-This fork also builds native Synology packages for DSM 7.3 and SRM 1.3.
-The package keeps the Synology-specific FUSE compatibility changes isolated
-from normal Linux, Docker, macOS and Windows builds.
-
-See [the Synology packaging guide](https://github.com/ESI69190/decypharr/blob/main/synology/README.md) for the
-supported architecture matrix, FUSE helper setup and shared-folder ACL notes.

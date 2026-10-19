@@ -100,3 +100,16 @@ make -C .synology-build/spksrc/spk/decypharr \
 ```
 
 Generated packages are written below `.synology-build/spksrc/packages/`.
+
+## Upstream synchronization
+
+This fork keeps Synology-specific changes isolated under `synology/` wherever possible.
+
+Automation uses two tracks:
+
+- `upstream-main` is a machine-owned mirror of `sirrobot01/decypharr:main`, refreshed every two hours.
+- `main` is the stable Synology downstream branch. It advances only when upstream publishes a stable GitHub release and the DSM 7.3 avoton package passes validation.
+
+The stable release synchronizer merges the upstream release tag into a temporary `sync/upstream-vX.Y` branch, updates `synology/UPSTREAM_VERSION`, builds the avoton SPK, and only then merges the generated PR into `main` and publishes the matching Synology release.
+
+If an upstream merge conflicts or the Synology package fails to build, `main` and the latest published SPK remain unchanged.

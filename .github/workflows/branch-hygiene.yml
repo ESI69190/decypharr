@@ -1,0 +1,40 @@
+name: Enforce branch hygiene
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    name: Keep only main, feat and upstream-main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove all non-canonical branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          KEEP_REGEX='^(main|feat|upstream-main)$'
+
+          mapfile -t branches < <(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/branches?per_page=100"               --jq '.[].name'
+          )
+
+          for branch in "${branches[@]}"; do
+            if [[ "${branch}" =~ ${KEEP_REGEX} ]]; then
+              echo "keep: ${branch}"
+              continue
+            fi
+
+            echo "delete: ${branch}"
+            gh api               --method DELETE               "repos/${GITHUB_REPOSITORY}/git/refs/heads/${branch//\//%2F}"
+          done
