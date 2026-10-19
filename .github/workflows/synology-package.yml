@@ -48,6 +48,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate Synology maintenance scripts
+        run: |
+          bash -n synology/prepare-spksrc.sh
+          bash -n synology/sync-upstream-release.sh
+          sh -n synology/cross/decypharr/src/patch-synology-fuse.sh
+          sh -n synology/cross/decypharr/src/patch-synology-runtime.sh
+
       - name: Derive package version
         id: meta
         shell: bash
