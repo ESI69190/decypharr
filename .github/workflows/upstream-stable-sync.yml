@@ -8,191 +8,16 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: read
 
 concurrency:
   group: upstream-stable-release
   cancel-in-progress: false
 
-env:
-  UPSTREAM_REPO: sirrobot01/decypharr
-
 jobs:
-  prepare:
-    name: Prepare upstream release sync
+  sync:
+    name: Validate and promote latest stable upstream
     runs-on: ubuntu-latest
-    outputs:
-      should_sync: ${{ steps.meta.outputs.should_sync }}
-      tag: ${{ steps.meta.outputs.tag }}
-      version: ${{ steps.meta.outputs.version }}
-      branch: ${{ steps.meta.outputs.branch }}
-      upstream_sha: ${{ steps.meta.outputs.upstream_sha }}
-    steps:
-      - name: Checkout downstream main
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Detect latest stable upstream release
-        id: meta
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          TAG="$(gh api "repos/${UPSTREAM_REPO}/releases/latest" --jq '.tag_name')"
-          VERSION="${TAG#v}"
-          BRANCH="sync/upstream-${TAG}"
-
-          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
-          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "branch=${BRANCH}" >> "${GITHUB_OUTPUT}"
-
-          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            echo "should_sync=false" >> "${GITHUB_OUTPUT}"
-            {
-              echo "## Stable upstream sync"
-              echo
-              echo "Downstream release `${TAG}` already exists. Nothing to do."
-            } >> "${GITHUB_STEP_SUMMARY}"
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git" 2>/dev/null || \
-            git remote set-url upstream "https://github.com/${UPSTREAM_REPO}.git"
-
-          git fetch origin main
-          git fetch --force upstream "refs/tags/${TAG}:refs/tags/upstream-${TAG}"
-
-          UPSTREAM_SHA="$(git rev-list -n 1 "refs/tags/upstream-${TAG}")"
-          echo "upstream_sha=${UPSTREAM_SHA}" >> "${GITHUB_OUTPUT}"
-
-          git switch -C "${BRANCH}" origin/main
-
-          if ! git merge --no-ff "refs/tags/upstream-${TAG}" -m "Sync upstream ${TAG}"; then
-            git status --short
-            git merge --abort || true
-            {
-              echo "## Stable upstream sync failed"
-              echo
-              echo "Merge conflict while integrating `${TAG}`."
-              echo
-              echo "Downstream `main` was not modified."
-            } >> "${GITHUB_STEP_SUMMARY}"
-            exit 1
-          fi
-
-          printf '%s\n' "${VERSION}" > synology/UPSTREAM_VERSION
-          printf '%s\n' "${UPSTREAM_SHA}" > synology/UPSTREAM_SHA
-          git add synology/UPSTREAM_VERSION synology/UPSTREAM_SHA
-
-          if ! git diff --cached --quiet; then
-            git commit -m "chore(sync): pin upstream ${TAG}"
-          fi
-
-          git push --force origin "HEAD:refs/heads/${BRANCH}"
-          echo "should_sync=true" >> "${GITHUB_OUTPUT}"
-
-          {
-            echo "## Stable upstream sync prepared"
-            echo
-            echo "- tag: `${TAG}`"
-            echo "- upstream SHA: `${UPSTREAM_SHA}`"
-            echo "- sync branch: `${BRANCH}`"
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-  validate:
-    name: Validate DSM 7.3 avoton
-    needs: prepare
-    if: needs.prepare.outputs.should_sync == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 75
-    steps:
-      - name: Checkout prepared sync branch
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.prepare.outputs.branch }}
-          fetch-depth: 0
-
-      - name: Prepare pinned spksrc tree
-        env:
-          DECYPHARR_GIT_HASH: ${{ needs.prepare.outputs.upstream_sha }}
-          SPKSRC_DIR: ${{ github.workspace }}/.synology-build/spksrc
-        run: bash synology/prepare-spksrc.sh
-
-      - name: Cache avoton toolchain and Go modules
-        uses: actions/cache@v6
-        with:
-          path: |
-            .synology-build/spksrc/toolchain/*/work
-            .synology-build/spksrc/distrib/go
-          key: upstream-sync-avoton-7.3-${{ hashFiles('go.sum', 'synology/cross/decypharr/Makefile', 'synology/spk/decypharr/Makefile', 'synology/cross/decypharr/src/*.sh') }}
-          restore-keys: |
-            upstream-sync-avoton-7.3-
-
-      - name: Build avoton SPK
-        env:
-          DECYPHARR_GIT_HASH: ${{ needs.prepare.outputs.upstream_sha }}
-          DECYPHARR_VERSION: ${{ needs.prepare.outputs.version }}
-        run: |
-          docker run --rm \
-            -e DECYPHARR_GIT_HASH \
-            -e DECYPHARR_VERSION \
-            -v "$PWD/.synology-build/spksrc:/spksrc" \
-            -w /spksrc \
-            ghcr.io/synocommunity/spksrc:latest \
-            make -C spk/decypharr arch-avoton-7.3 SPK_PACKAGE_ARCHS=avoton
-
-      - name: Collect validated package
-        env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          mkdir -p out
-          mapfile -t packages < <(find .synology-build/spksrc/packages -maxdepth 1 -type f -name 'decypharr*.spk' -print | sort)
-
-          if [[ "${#packages[@]}" -ne 1 ]]; then
-            echo "::error::Expected exactly one Decypharr SPK, found ${#packages[@]}"
-            printf '%s\n' "${packages[@]}"
-            exit 1
-          fi
-
-          OUTPUT="out/decypharr-${VERSION}-dsm7.3-avoton.spk"
-          cp "${packages[0]}" "${OUTPUT}"
-          sha256sum "${OUTPUT}" > "${OUTPUT}.sha256"
-
-      - name: Upload validated avoton package
-        uses: actions/upload-artifact@v7
-        with:
-          name: upstream-stable-avoton
-          path: out/*
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: upstream-stable-diagnostics
-          path: |
-            .synology-build/spksrc/spk/decypharr/*.log
-            .synology-build/spksrc/spk/decypharr/work-*/INFO
-            .synology-build/spksrc/spk/decypharr/work-*/PLIST
-          if-no-files-found: ignore
-          include-hidden-files: true
-          retention-days: 14
-
-  promote:
-    name: Promote validated stable release
-    needs: [prepare, validate]
-    if: needs.prepare.outputs.should_sync == 'true' && needs.validate.result == 'success'
-    runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - name: Checkout downstream main
         uses: actions/checkout@v7
@@ -200,100 +25,22 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Download validated package
-        uses: actions/download-artifact@v8
+      - name: Sync, build and promote
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM_REPO: sirrobot01/decypharr
+        run: bash synology/sync-upstream-release.sh
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
         with:
-          name: upstream-stable-avoton
-          path: release
-
-      - name: Create audit PR and merge
-        id: merge
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.prepare.outputs.tag }}
-          BRANCH: ${{ needs.prepare.outputs.branch }}
-          UPSTREAM_SHA: ${{ needs.prepare.outputs.upstream_sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          PR_NUMBER="$(gh pr list \
-            --repo "${GITHUB_REPOSITORY}" \
-            --head "${BRANCH}" \
-            --base main \
-            --state open \
-            --json number \
-            --jq '.[0].number // empty')"
-
-          if [[ -z "${PR_NUMBER}" ]]; then
-            PR_URL="$(gh pr create \
-              --repo "${GITHUB_REPOSITORY}" \
-              --base main \
-              --head "${BRANCH}" \
-              --title "Sync upstream ${TAG}" \
-              --body "Automated stable synchronization from `sirrobot01/decypharr`.
-
-Upstream tag: `${TAG}`
-Upstream commit: `${UPSTREAM_SHA}`
-
-The DSM 7.3 avoton SPK was built successfully before this PR was promoted.")"
-            PR_NUMBER="${PR_URL##*/}"
-          fi
-
-          gh pr merge "${PR_NUMBER}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --merge
-
-          MERGE_SHA="$(gh pr view "${PR_NUMBER}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --json mergeCommit \
-            --jq '.mergeCommit.oid')"
-
-          echo "merge_sha=${MERGE_SHA}" >> "${GITHUB_OUTPUT}"
-          echo "pr_number=${PR_NUMBER}" >> "${GITHUB_OUTPUT}"
-
-      - name: Publish Synology stable release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.prepare.outputs.tag }}
-          VERSION: ${{ needs.prepare.outputs.version }}
-          MERGE_SHA: ${{ steps.merge.outputs.merge_sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cd release
-
-          SPK="decypharr-${VERSION}-dsm7.3-avoton.spk"
-          test -f "${SPK}"
-          sha256sum "${SPK}" > SHA256SUMS
-
-          UPSTREAM_URL="$(gh api "repos/${UPSTREAM_REPO}/releases/tags/${TAG}" --jq '.html_url')"
-
-          cat > RELEASE_NOTES.md <<EOF
-Native Synology DSM 7.3 avoton package for Decypharr ${TAG}.
-
-Upstream release: ${UPSTREAM_URL}
-
-This package is built from upstream commit `${{ needs.prepare.outputs.upstream_sha }}` and applies the maintained Synology compatibility layer at package build time.
-EOF
-
-          if ! gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release create "${TAG}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --target "${MERGE_SHA}" \
-              --title "decypharr ${TAG}" \
-              --notes-file RELEASE_NOTES.md
-          fi
-
-          gh release upload "${TAG}" \
-            "${SPK}" SHA256SUMS \
-            --repo "${GITHUB_REPOSITORY}" \
-            --clobber
-
-      - name: Remove temporary sync branch
-        env:
-          BRANCH: ${{ needs.prepare.outputs.branch }}
-        shell: bash
-        run: |
-          git push origin --delete "${BRANCH}" || true
+          name: upstream-stable-sync-diagnostics
+          path: |
+            .synology-build/spksrc/spk/decypharr/*.log
+            .synology-build/spksrc/spk/decypharr/work-*/INFO
+            .synology-build/spksrc/spk/decypharr/work-*/PLIST
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 14
