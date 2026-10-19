@@ -60,7 +60,8 @@ jobs:
             VERSION="$(cat synology/UPSTREAM_VERSION 2>/dev/null || printf '%s' "${DECYPHARR_BASE_VERSION}")"
           fi
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          SOURCE_SHA="$(cat synology/UPSTREAM_SHA 2>/dev/null || printf '%s' "${GITHUB_SHA}")"
+          echo "source_sha=${SOURCE_SHA}" >> "${GITHUB_OUTPUT}"
 
       - name: Prepare pinned spksrc tree
         env:
@@ -279,7 +280,8 @@ jobs:
             VERSION="$(cat synology/UPSTREAM_VERSION 2>/dev/null || printf '%s' "${DECYPHARR_BASE_VERSION}")"
           fi
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
-          echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          SOURCE_SHA="$(cat synology/UPSTREAM_SHA 2>/dev/null || printf '%s' "${GITHUB_SHA}")"
+          echo "source_sha=${SOURCE_SHA}" >> "${GITHUB_OUTPUT}"
 
       - name: Prepare pinned spksrc tree
         env:
