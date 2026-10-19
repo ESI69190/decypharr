@@ -14,8 +14,7 @@ on:
   push:
     branches:
       - main
-      - 'synology-*'
-      - 'release-v*'
+      - feat
     tags:
       - 'v*'
     paths:
@@ -140,7 +139,7 @@ jobs:
 
   build:
     name: ${{ matrix.platform }} ${{ matrix.version }} / ${{ matrix.arch }}
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release-v')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     needs: smoke
     runs-on: ubuntu-latest
     strategy:
